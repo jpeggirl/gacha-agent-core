@@ -32,7 +32,7 @@ export class PriceEngine {
   private cacheTtlMs = 30 * 60 * 1000; // 30 minutes
 
   constructor(config: GachaAgentConfig) {
-    this.baseUrl = config.pokemonPriceTracker.baseUrl;
+    this.baseUrl = this.normalizeBaseUrl(config.pokemonPriceTracker.baseUrl);
     this.apiKey = config.pokemonPriceTracker.apiKey;
   }
 
@@ -119,5 +119,13 @@ export class PriceEngine {
     }
 
     return res.json() as Promise<PsaPricingResponse>;
+  }
+
+  private normalizeBaseUrl(baseUrl: string): string {
+    // Keep auth headers intact by avoiding cross-host redirect.
+    return baseUrl.replace(
+      '://pokemonpricetracker.com',
+      '://www.pokemonpricetracker.com',
+    );
   }
 }

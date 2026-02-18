@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -24,7 +25,7 @@ function loadConfig(): GachaAgentConfig {
   return {
     pokemonPriceTracker: {
       apiKey: env('POKEMON_PRICE_TRACKER_API_KEY'),
-      baseUrl: env('POKEMON_PRICE_TRACKER_URL', 'https://pokemonpricetracker.com'),
+      baseUrl: env('POKEMON_PRICE_TRACKER_URL', 'https://www.pokemonpricetracker.com'),
     },
     ebay: process.env.EBAY_APP_ID
       ? {
@@ -318,8 +319,23 @@ async function main() {
             candidates: result.candidates,
           });
         }
-        const fmv = await priceEngine.getFMV(result.bestMatch, grade);
-        return json(res, 200, { resolved: true, card: result.bestMatch, fmv });
+        try {
+          const fmv = await priceEngine.getFMV(result.bestMatch, grade);
+          return json(res, 200, {
+            resolved: true,
+            pricingAvailable: true,
+            card: result.bestMatch,
+            fmv,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return json(res, 200, {
+            resolved: true,
+            pricingAvailable: false,
+            pricingError: message,
+            card: result.bestMatch,
+          });
+        }
       }
 
       // POST /api/watch — add to watchlist (uses agent_id as userId)

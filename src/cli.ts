@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import { CardResolver } from './card-resolver/resolver.js';
 import { WatchlistManager } from './watchlist/manager.js';
 import { JsonStorageAdapter } from './watchlist/storage-json.js';
@@ -15,7 +16,7 @@ function loadConfig(): GachaAgentConfig {
   return {
     pokemonPriceTracker: {
       apiKey: env('POKEMON_PRICE_TRACKER_API_KEY'),
-      baseUrl: env('POKEMON_PRICE_TRACKER_URL', 'https://pokemonpricetracker.com'),
+      baseUrl: env('POKEMON_PRICE_TRACKER_URL', 'https://www.pokemonpricetracker.com'),
     },
     ebay: process.env.EBAY_APP_ID
       ? {
