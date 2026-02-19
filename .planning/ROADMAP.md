@@ -16,7 +16,7 @@
 - [ ] **Phase 4: OpenClaw Skill Wrapper** - Skill published to ClawHub registry and invocable by OpenClaw agents via natural language
 - [ ] **Phase 5: Purchase Execution (eBay Order API)** - End-to-end purchase flow from alert to confirmed eBay order placement
 - [ ] **Phase 6: Post-Launch Hardening** - Testing infrastructure, simulation mode, and v1.x quality improvements
-- [ ] **Phase 7: Phase 2 Completion & Code Quality** - Integration gaps closed, lint clean, tracking corrected (gap closure from v1.0 audit)
+- [x] **Phase 7: Phase 2 Completion & Code Quality** - Integration gaps closed, lint clean, tracking corrected (gap closure from v1.0 audit) (completed 2026-02-19)
 
 ---
 
@@ -66,7 +66,11 @@ Plans:
   2. When a user replies to a deal alert, the bot acknowledges the reply and presents a human confirmation step before any purchase action is taken
   3. The bot does not place any order without an explicit human confirmation — automated scheduled jobs cannot trigger order placement
   4. Telegram webhook or polling mode is running and receives messages reliably; retry behavior handles Telegram 429 rate limit responses without crashing
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — Inline keyboard on deal alerts + startPolling/stopPolling methods on TelegramAlerts
+- [ ] 03-02-PLAN.md — Signal filter in ScanScheduler (strong_buy/buy only trigger alerts)
+- [ ] 03-03-PLAN.md — Wire polling lifecycle into server.ts boot and shutdown
 
 ### Phase 4: OpenClaw Skill Wrapper
 **Goal**: The Gacha Agent is discoverable and invocable in the OpenClaw ecosystem — users can trigger watchlist and scanning actions through natural language
@@ -115,7 +119,12 @@ Plans:
   5. 02-07-SUMMARY.md `requirements-completed` frontmatter includes SCAN-03, SCAN-04, SCAN-05
   6. `ebay-api` npm package uninstalled (never imported — uses native fetch)
   7. Dead `rawConfidence` field removed from `CardCandidate` and all usages updated
-**Plans**: TBD
+**Plans:** 4/4 plans complete
+Plans:
+- [x] 07-01-PLAN.md — Remove ConditionPrice, rawConfidence dead code, uninstall ebay-api
+- [x] 07-02-PLAN.md — Add CLI remove subcommand for watchlist entry removal
+- [x] 07-03-PLAN.md — Wire ScanScheduler into server.ts for continuous background scanning
+- [x] 07-04-PLAN.md — Update 02-07-SUMMARY frontmatter and REQUIREMENTS.md traceability
 
 ---
 
@@ -125,11 +134,11 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation and Tooling | 1/1 | Complete | 2026-02-18 |
 | 2. Core Module Hardening | 8/8 | Complete    | 2026-02-19 |
-| 3. Bidirectional Telegram and BUY Command | 0/? | Not started | - |
+| 3. Bidirectional Telegram and BUY Command | 0/3 | Not started | - |
 | 4. OpenClaw Skill Wrapper | 0/? | Not started | - |
 | 5. Purchase Execution (eBay Order API) | 0/? | Not started | - |
 | 6. Post-Launch Hardening | 0/? | Not started | - |
-| 7. Phase 2 Completion & Code Quality | 0/? | Not started | - |
+| 7. Phase 2 Completion & Code Quality | 4/4 | Complete   | 2026-02-19 |
 
 ---
 
