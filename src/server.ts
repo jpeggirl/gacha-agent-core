@@ -211,17 +211,18 @@ async function main() {
         confidence: popular.confidence,
       };
     }
-    // Fall back to query params
+    // Fall back to query params — use || so empty strings become falsy defaults
+    // that query builders naturally skip (e.g. if (card.number) { ... })
     return {
       id,
-      name: params.get('name') ?? 'Unknown',
-      setName: params.get('setName') ?? 'Unknown Set',
-      setCode: params.get('setCode') ?? 'unknown',
-      number: params.get('number') ?? 'unknown',
-      year: parseInt(params.get('year') ?? String(new Date().getFullYear()), 10),
-      rarity: params.get('rarity') ?? undefined,
-      variant: params.get('variant') ?? undefined,
-      imageUrl: params.get('imageUrl') ?? undefined,
+      name: params.get('name') || 'Unknown',
+      setName: params.get('setName') || '',
+      setCode: params.get('setCode') || '',
+      number: params.get('number') || '',
+      year: parseInt(params.get('year') || String(new Date().getFullYear()), 10),
+      rarity: params.get('rarity') || undefined,
+      variant: params.get('variant') || undefined,
+      imageUrl: params.get('imageUrl') || undefined,
       confidence: 1.0,
     };
   }
@@ -387,8 +388,14 @@ async function main() {
           recentSearches.slice(0, MAX_RECENT_SEARCHES),
           PPT_CONCURRENCY,
           async (entry) => {
-            const fmv = await priceEngine.getFMV(entry.card, defaultGrade, 'PSA');
-            return { card: entry.card, defaultGrade, fmv: fmv?.fmv ?? null };
+            let fmv: number | null = null;
+            try {
+              const result = await priceEngine.getFMV(entry.card, defaultGrade, 'PSA');
+              fmv = result?.fmv ?? null;
+            } catch {
+              // FMV fetch failed — still show the card
+            }
+            return { card: entry.card, defaultGrade, fmv };
           },
         );
         const cards = recentResults
@@ -436,9 +443,10 @@ async function main() {
 
         json(res, 200, response);
 
-        // Fire-and-forget: record recent search
-        if (result.bestMatch) {
-          recordRecentSearch(storage, result.bestMatch, query).catch((err) =>
+        // Fire-and-forget: record recent search (bestMatch or top candidate)
+        const cardToRecord = result.bestMatch ?? result.candidates[0]?.card;
+        if (cardToRecord) {
+          recordRecentSearch(storage, cardToRecord, query).catch((err) =>
             console.warn('[Server] Failed to record recent search:', err),
           );
         }
@@ -475,6 +483,12 @@ async function main() {
       const grade = parseInt(url.searchParams.get('grade') ?? '10', 10);
       try {
         const card = cardFromParams(cardId, url.searchParams);
+
+        // Fire-and-forget: record card detail view as recent search
+        recordRecentSearch(storage, card, card.name).catch((err) =>
+          console.warn('[Server] Failed to record recent search:', err),
+        );
+
         const multiSource = await priceEngine.getMultiSourcePricing(card, grade, 'PSA');
         return json(res, 200, {
           card: multiSource.card,

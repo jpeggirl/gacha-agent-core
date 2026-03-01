@@ -68,6 +68,42 @@ function cleanCardName(name: string): string {
     .trim();
 }
 
+/** Noise words commonly found in raw eBay titles that don't help search specificity. */
+const RAW_TITLE_NOISE = new Set([
+  'pokemon', 'jpn', 'japan', 'japanese', 'eng', 'english',
+  'promo', 'promos', 'foil', 'holo', 'holofoil', 'holographic',
+  'card', 'cards', 'tcg', 'ccg', 'cgc', 'mint',
+  'comics', 'comic', 'magazine',
+  'rare', 'ultra', 'secret', 'common', 'uncommon',
+]);
+
+/** Year-like tokens at the start of raw titles (e.g., "2001", "1999"). */
+const YEAR_RE = /^(19|20)\d{2}$/;
+
+/**
+ * Shorten an overly long raw eBay title to its distinctive terms.
+ * If the name is ≤5 words it's likely a clean name ("Shining Mew") — returned as-is.
+ * If >5 words, strip noise and keep up to 4 distinctive terms.
+ *
+ * Example: "2001 POKEMON JPN PROMO COROCORO COMICS FOIL 151 SHINING MEW"
+ *        → "COROCORO 151 SHINING MEW"
+ */
+export function shortenRawTitle(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length <= 5) return name;
+
+  const distinctive = words.filter((w) => {
+    const lower = w.toLowerCase();
+    if (RAW_TITLE_NOISE.has(lower)) return false;
+    if (YEAR_RE.test(w)) return false;
+    return true;
+  });
+
+  // Keep up to 4 distinctive words; if nothing survived, fall back to last 3 words
+  if (distinctive.length === 0) return words.slice(-3).join(' ');
+  return distinctive.slice(0, 4).join(' ');
+}
+
 /**
  * Extract variant-distinguishing keywords from card metadata.
  * Used to both refine the eBay query and post-filter results.
@@ -309,7 +345,8 @@ export class EbayScanner {
    * Long variant phrases and grade labels are omitted to maximize results;
    * the aspect_filter and post-filter handle those concerns. */
   private buildAuctionQuery(card: ResolvedCard): string {
-    const parts: string[] = [cleanCardName(card.name)];
+    const cleaned = cleanCardName(card.name);
+    const parts: string[] = [shortenRawTitle(cleaned)];
 
     // Only include short variant terms (≤2 words) like "Shadowless", "1st Edition"
     if (card.variant) {
@@ -319,7 +356,7 @@ export class EbayScanner {
       }
     }
 
-    if (card.number) {
+    if (card.number && card.number !== 'unknown') {
       parts.push(card.number);
     }
 
@@ -414,7 +451,7 @@ export class EbayScanner {
   private buildSearchQuery(card: ResolvedCard, grade?: number, grader: Grader = 'PSA'): string {
     const parts: string[] = [];
 
-    parts.push(card.name);
+    parts.push(shortenRawTitle(card.name));
 
     // Intentionally exclude set name to avoid overly narrow search
     // eBay title matches are more reliable with card name + variant + number
@@ -423,7 +460,7 @@ export class EbayScanner {
       parts.push(card.variant);
     }
 
-    if (card.number) {
+    if (card.number && card.number !== 'unknown') {
       parts.push(card.number);
     }
 

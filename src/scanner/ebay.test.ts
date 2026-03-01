@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server.js';
-import { EbayScanner, inferVariantKeywords, titleMatchesVariant } from './ebay.js';
+import { EbayScanner, inferVariantKeywords, titleMatchesVariant, shortenRawTitle } from './ebay.js';
 import type { GachaAgentConfig, ResolvedCard, EbaySearchOverride } from '../types/index.js';
 
 const TEST_CONFIG: GachaAgentConfig = {
@@ -1244,6 +1244,123 @@ describe('EbayScanner', () => {
       const auctions = await scanner.scanAuctions(testCard, 10);
 
       expect(auctions).toHaveLength(0);
+    });
+
+    it('excludes "unknown" number from auction query', async () => {
+      let capturedUrl = '';
+      server.use(
+        makeTokenHandler(),
+        http.get(EBAY_BROWSE_URL, ({ request }) => {
+          capturedUrl = request.url;
+          return HttpResponse.json({ total: 0 });
+        }),
+      );
+
+      const fallbackCard: ResolvedCard = {
+        id: 'ebay-fallback-1',
+        name: 'Shining Mew',
+        setName: '',
+        setCode: '',
+        number: 'unknown',
+        year: 2001,
+        confidence: 1.0,
+      };
+
+      const scanner = new EbayScanner(TEST_CONFIG);
+      await scanner.scanAuctions(fallbackCard, 10);
+
+      const url = new URL(capturedUrl);
+      const query = url.searchParams.get('q') ?? '';
+      expect(query).toContain('Shining Mew');
+      expect(query).not.toContain('unknown');
+    });
+
+    it('excludes empty number from auction query', async () => {
+      let capturedUrl = '';
+      server.use(
+        makeTokenHandler(),
+        http.get(EBAY_BROWSE_URL, ({ request }) => {
+          capturedUrl = request.url;
+          return HttpResponse.json({ total: 0 });
+        }),
+      );
+
+      const fallbackCard: ResolvedCard = {
+        id: 'ebay-fallback-2',
+        name: 'Shining Mew',
+        setName: '',
+        setCode: '',
+        number: '',
+        year: 2001,
+        confidence: 1.0,
+      };
+
+      const scanner = new EbayScanner(TEST_CONFIG);
+      await scanner.scanAuctions(fallbackCard, 10);
+
+      const url = new URL(capturedUrl);
+      const query = url.searchParams.get('q') ?? '';
+      expect(query).toBe('Shining Mew');
+    });
+
+    it('shortens overly long raw eBay title in auction query', async () => {
+      let capturedUrl = '';
+      server.use(
+        makeTokenHandler(),
+        http.get(EBAY_BROWSE_URL, ({ request }) => {
+          capturedUrl = request.url;
+          return HttpResponse.json({ total: 0 });
+        }),
+      );
+
+      const rawTitleCard: ResolvedCard = {
+        id: 'ebay-fallback-3',
+        name: '2001 POKEMON JPN PROMO COROCORO COMICS FOIL 151 SHINING MEW',
+        setName: '',
+        setCode: '',
+        number: '',
+        year: 2001,
+        confidence: 1.0,
+      };
+
+      const scanner = new EbayScanner(TEST_CONFIG);
+      await scanner.scanAuctions(rawTitleCard, 10);
+
+      const url = new URL(capturedUrl);
+      const query = url.searchParams.get('q') ?? '';
+      // Should be shortened — not the full raw title
+      expect(query).not.toContain('POKEMON');
+      expect(query).not.toContain('2001');
+      expect(query).toContain('SHINING');
+      expect(query).toContain('MEW');
+      // Should be reasonably short (not the full 10-word title)
+      expect(query.split(/\s+/).length).toBeLessThanOrEqual(5);
+    });
+  });
+
+  describe('shortenRawTitle()', () => {
+    it('returns short names (≤5 words) unchanged', () => {
+      expect(shortenRawTitle('Shining Mew')).toBe('Shining Mew');
+      expect(shortenRawTitle('Charizard VMAX Alt Art')).toBe('Charizard VMAX Alt Art');
+    });
+
+    it('strips noise words and years from long raw titles', () => {
+      const result = shortenRawTitle('2001 POKEMON JPN PROMO COROCORO COMICS FOIL 151 SHINING MEW');
+      expect(result).not.toContain('POKEMON');
+      expect(result).not.toContain('2001');
+      expect(result).not.toContain('JPN');
+      expect(result).toContain('SHINING');
+      expect(result).toContain('MEW');
+    });
+
+    it('caps output at 4 words max', () => {
+      const result = shortenRawTitle('2001 POKEMON JPN PROMO COROCORO COMICS FOIL 151 SHINING MEW');
+      expect(result.split(/\s+/).length).toBeLessThanOrEqual(4);
+    });
+
+    it('falls back to last 3 words if all words are noise', () => {
+      const result = shortenRawTitle('POKEMON JPN PROMO FOIL HOLO CARD');
+      expect(result.split(/\s+/).length).toBe(3);
     });
   });
 });
