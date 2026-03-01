@@ -1,4 +1,14 @@
 {
   "buildCommand": "",
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://gacha-agent-core-api-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://gacha-agent-core-api-production.up.railway.app/health"
+    }
+  ]
 }

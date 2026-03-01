@@ -53,7 +53,8 @@ const pcSearchResponse = {
       'manual-only-price': 182600,   // PSA 10 = $1,826.00
       'box-only-price': 24500,       // PSA 9  = $245.00
       'new-price': 12500,            // PSA 8  = $125.00
-      'graded-price': 8900,          // PSA 7  = $89.00
+      'cib-price': 8900,             // PSA 7  = $89.00
+      'graded-price': 22000,         // Aggregate "any graded" (not a specific PSA grade)
       'loose-price': 4200,           // Ungraded = $42.00
     },
   ],
@@ -102,7 +103,7 @@ describe('PriceEngine.getFMV()', () => {
     expect(result!.prices[0]!.source).toBe('PriceCharting PSA 9');
   });
 
-  it('returns FMV from PriceCharting graded-price for PSA 7', async () => {
+  it('returns FMV from PriceCharting cib-price for PSA 7', async () => {
     server.use(
       http.get(`${PC_BASE}/products`, () => {
         return HttpResponse.json(pcSearchResponse);
@@ -112,7 +113,7 @@ describe('PriceEngine.getFMV()', () => {
     const result = await engine.getFMV(mewEx, 7);
 
     expect(result).not.toBeNull();
-    expect(result!.fmv).toBe(89);  // graded-price / 100
+    expect(result!.fmv).toBe(89);  // cib-price / 100
     expect(result!.prices[0]!.source).toBe('PriceCharting PSA 7');
   });
 
@@ -165,7 +166,7 @@ describe('PriceEngine.getFMV()', () => {
     const zeroPrices = structuredClone(pcSearchResponse);
     zeroPrices.products[0]!['manual-only-price'] = 0;
     zeroPrices.products[0]!['box-only-price'] = 0;
-    zeroPrices.products[0]!['graded-price'] = 0;
+    zeroPrices.products[0]!['cib-price'] = 0;
 
     server.use(
       http.get(`${PC_BASE}/products`, () => {
@@ -520,7 +521,7 @@ describe('PriceEngine.getMultiSourcePricing()', () => {
     expect(result.allGrades[9]).toBe(245);
     // PSA 8: PriceCharting has dedicated field (new-price), no PPT eBay data
     expect(result.allGrades[8]).toBe(125);
-    // PSA 7: PriceCharting has dedicated field (graded-price), no PPT eBay data
+    // PSA 7: PriceCharting has dedicated field (cib-price), no PPT eBay data
     expect(result.allGrades[7]).toBe(89);
     // PSA 6: No dedicated PriceCharting field, no PPT eBay data → null
     expect(result.allGrades[6]).toBeNull();
@@ -547,7 +548,7 @@ describe('PriceEngine.getMultiSourcePricing()', () => {
     expect(result.allGrades[9]).toBe(245);
     // PSA 8: Falls back to PriceCharting new-price
     expect(result.allGrades[8]).toBe(125);
-    // PSA 7: Falls back to PriceCharting graded-price
+    // PSA 7: Falls back to PriceCharting cib-price
     expect(result.allGrades[7]).toBe(89);
     // PSA 6: No PriceCharting field → null
     expect(result.allGrades[6]).toBeNull();

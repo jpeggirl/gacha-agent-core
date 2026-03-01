@@ -7,10 +7,12 @@
 //   manual-only-price  → PSA 10
 //   box-only-price     → PSA 9
 //   new-price          → PSA 8
-//   graded-price       → PSA 7
-//   cib-price          → PSA 9.5
+//   cib-price          → PSA 7
 //   bgs-10-price       → BGS 10
 //   loose-price        → Ungraded
+//
+// NOTE: graded-price is NOT PSA 7 — it's an aggregate "any graded" value
+// (~91% of PSA 9 consistently). Do not use it for any specific PSA grade.
 
 import type { Grader } from '../types/index.js';
 
@@ -34,7 +36,7 @@ function gradeField(grader: Grader, grade: number): GradeFieldResult | null {
     if (grade === 10) return { field: 'manual-only-price', isApproximate: false, sourceLabel: 'PriceCharting PSA 10' };
     if (grade === 9) return { field: 'box-only-price', isApproximate: false, sourceLabel: 'PriceCharting PSA 9' };
     if (grade === 8) return { field: 'new-price', isApproximate: false, sourceLabel: 'PriceCharting PSA 8' };
-    if (grade === 7) return { field: 'graded-price', isApproximate: false, sourceLabel: 'PriceCharting PSA 7' };
+    if (grade === 7) return { field: 'cib-price', isApproximate: false, sourceLabel: 'PriceCharting PSA 7' };
     // No dedicated field for PSA 6 and below
     return null;
   }
@@ -43,7 +45,7 @@ function gradeField(grader: Grader, grade: number): GradeFieldResult | null {
   if (grade === 10) return { field: 'manual-only-price', isApproximate: true, sourceLabel: `PriceCharting PSA 10 (approximate for ${grader} ${grade})` };
   if (grade === 9) return { field: 'box-only-price', isApproximate: true, sourceLabel: `PriceCharting PSA 9 (approximate for ${grader} ${grade})` };
   if (grade === 8) return { field: 'new-price', isApproximate: true, sourceLabel: `PriceCharting PSA 8 (approximate for ${grader} ${grade})` };
-  if (grade === 7) return { field: 'graded-price', isApproximate: true, sourceLabel: `PriceCharting PSA 7 (approximate for ${grader} ${grade})` };
+  if (grade === 7) return { field: 'cib-price', isApproximate: true, sourceLabel: `PriceCharting PSA 7 (approximate for ${grader} ${grade})` };
   return null;
 }
 
