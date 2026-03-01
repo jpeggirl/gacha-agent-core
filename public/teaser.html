@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gacha Agent — Product Teaser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: #000000; overflow: hidden; }
+
+        /* Phone frame */
+        .phone {
+            width: 375px; height: 812px;
+            background: #0a0a0a;
+            border-radius: 40px;
+            border: 2px solid #333;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 80px rgba(223, 255, 0, 0.08), 0 0 0 1px rgba(255,255,255,0.04);
+        }
+        .phone-notch {
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            width: 150px; height: 28px;
+            background: #0a0a0a;
+            border-radius: 0 0 20px 20px;
+            z-index: 50;
+        }
+
+        /* Scene transitions */
+        .scene {
+            position: absolute; inset: 0;
+            opacity: 0; transform: translateY(8px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            pointer-events: none;
+            display: flex; flex-direction: column;
+        }
+        .scene.active {
+            opacity: 1; transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        /* Typing cursor */
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .cursor-blink { animation: blink 0.8s step-end infinite; }
+
+        /* Breathe */
+        @keyframes breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        .animate-breathe { animation: breathe 2s ease-in-out infinite; }
+
+        /* Slide in from bottom */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Scale pop */
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            60% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Toast slide */
+        @keyframes toastIn {
+            0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes toastOut {
+            0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+        }
+
+        /* Pulse */
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(0, 230, 118, 0); }
+        }
+
+        /* Card stagger */
+        .card-tile {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .card-tile.visible {
+            animation: slideUp 0.4s ease-out forwards;
+        }
+
+        /* Glow highlight */
+        @keyframes glowPulse {
+            0%, 100% { box-shadow: 0 0 0 2px rgba(223, 255, 0, 0.3); }
+            50% { box-shadow: 0 0 12px 4px rgba(223, 255, 0, 0.4); }
+        }
+
+        /* Step dots */
+        .step-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #2a2a2a; transition: all 0.3s ease;
+        }
+        .step-dot.active {
+            background: #dfff00; width: 20px; border-radius: 3px;
+        }
+        .step-dot.done { background: #666666; }
+
+        /* Tab bar */
+        .tab-item { display: flex; flex-direction: column; align-items: center; gap: 2px; color: #666666; font-size: 11px; font-weight: 500; transition: color 0.2s; }
+        .tab-item.active { color: #ffffff; }
+
+        /* Deal bar */
+        .deal-bar-track { height: 6px; background: #2a2a2a; border-radius: 3px; overflow: hidden; }
+        .deal-bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease-out; }
+
+        /* Tap indicator */
+        @keyframes tapRipple {
+            0% { transform: scale(0); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .tap-ring {
+            position: absolute; width: 50px; height: 50px; border-radius: 50%;
+            border: 2px solid rgba(223, 255, 0, 0.5);
+            pointer-events: none; opacity: 0;
+        }
+        .tap-ring.animate {
+            animation: tapRipple 0.5s ease-out forwards;
+        }
+
+        /* Card image in tile */
+        .card-img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+<!-- Outer wrapper -->
+<div class="flex flex-col items-center gap-6">
+    <!-- Title above phone -->
+    <div class="text-center space-y-2">
+        <h1 class="text-[#ffffff] text-2xl font-bold tracking-tight">Gacha Agent</h1>
+        <p class="text-[#999999] text-sm">Find deals. Pull cards. Build your collection.</p>
+    </div>
+
+    <!-- Phone mockup -->
+    <div class="phone" id="phone">
+        <div class="phone-notch"></div>
+
+        <!-- ======================== -->
+        <!-- SCENE 1: Goal Input      -->
+        <!-- ======================== -->
+        <div class="scene active" id="scene-1">
+            <div class="flex-1 flex flex-col pt-14 px-6">
+                <!-- Logo -->
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-10 h-10 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl flex items-center justify-center">
+                        <iconify-icon icon="mdi:pokeball" class="text-lg text-[#dfff00]"></iconify-icon>
+                    </div>
+                    <span class="text-base font-semibold text-[#ffffff]">Gacha Agent</span>
+                </div>
+
+                <!-- Question -->
+                <h2 class="text-xl font-bold text-[#ffffff] mb-2">What's your collecting goal?</h2>
+                <p class="text-sm text-[#999999] mb-6">Describe what you want — your agent handles the rest.</p>
+
+                <!-- Input area -->
+                <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4 min-h-[120px] relative" id="goal-input-box">
+                    <span class="text-[15px] text-[#ffffff] leading-relaxed" id="typed-text"></span>
+                    <span class="cursor-blink text-[#dfff00] font-light" id="typing-cursor">|</span>
+                </div>
+
+                <!-- Button -->
+                <button class="mt-6 w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-300" id="goal-btn"
+                    style="background: #2a2a2a; color: #666666;">
+                    Start Finding Deals
+                </button>
+
+                <!-- Analyzing state -->
+                <div class="mt-4 flex items-center gap-2 opacity-0 transition-opacity duration-300" id="analyzing-state">
+                    <div class="w-4 h-4 border-2 border-[#dfff00] border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-sm text-[#dfff00]">Analyzing your goals...</span>
+                </div>
+
+                <!-- Examples -->
+                <div class="mt-auto mb-6">
+                    <p class="text-xs text-[#666666] mb-2">Examples:</p>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span class="text-xs bg-[#1a1a1a] border border-[#2a2a2a] text-[#999999] px-2.5 py-1 rounded-full">complete base set PSA 8+</span>
+                        <span class="text-xs bg-[#1a1a1a] border border-[#2a2a2a] text-[#999999] px-2.5 py-1 rounded-full">flip modern promos under $100</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================== -->
+        <!-- SCENE 2: Explore Grid    -->
+        <!-- ======================== -->
+        <div class="scene" id="scene-2">
+            <!-- Status bar -->
+            <div class="pt-12 px-4 pb-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-[#dfff00] animate-breathe"></div>
+                    <span class="text-xs text-[#dfff00] font-medium">Scanning 4 vintage targets</span>
+                </div>
+                <span class="text-xs text-[#666666]">Just now</span>
+            </div>
+
+            <div class="flex-1 px-4 overflow-hidden">
+                <!-- Search bar -->
+                <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl px-4 py-3 flex items-center gap-2 mb-3">
+                    <iconify-icon icon="lucide:search" class="text-[#666666] text-base"></iconify-icon>
+                    <span class="text-sm text-[#666666]">vintage pokemon cards</span>
+                </div>
+
+                <!-- Filter chips -->
+                <div class="flex gap-2 mb-4 overflow-x-auto">
+                    <span class="text-xs bg-[#141414] border border-[#dfff00] text-[#dfff00] px-3 py-1.5 rounded-full font-medium whitespace-nowrap">PSA Graded</span>
+                    <span class="text-xs bg-[#141414] border border-[#2a2a2a] text-[#999999] px-3 py-1.5 rounded-full font-medium whitespace-nowrap">Strong Buy</span>
+                    <span class="text-xs bg-[#141414] border border-[#2a2a2a] text-[#999999] px-3 py-1.5 rounded-full font-medium whitespace-nowrap">Under $20k</span>
+                </div>
+
+                <!-- Card grid (2x2) -->
+                <div class="grid grid-cols-2 gap-3" id="explore-grid">
+                    <!-- Card 1: Charizard 1999 Pokemon Game Holo PSA 7 — STRONG BUY -->
+                    <div class="card-tile bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden" id="card-charizard">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://imagedelivery.net/r95GEZrC907pw2jCMpDPbQ/417f54f0-0b4c-44db-0d56-5e4ccdfffa00/public" alt="Charizard Holo PSA 7" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">Charizard #4 PSA 7</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$18,000</span>
+                                <iconify-icon icon="lucide:chevrons-down" class="text-[#00E676] text-lg"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Blastoise Holo PSA 9 — AT MARKET -->
+                    <div class="card-tile bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/uploads/32244cbd-0d35-4ae0-8fc7-99b372ae01a8/1771986739732-e351ee1e/1999_POKEMON_BASE_SET_UNLIMITED__2_BLASTOISE-HOLO_PSA_9.jpg" alt="Blastoise Holo PSA 9" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">Blastoise #2 PSA 9</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$990</span>
+                                <iconify-icon icon="lucide:minus" class="text-[#666666] text-base"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Shining Mew CoroCoro PSA 8 — AT MARKET -->
+                    <div class="card-tile bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/uploads/32244cbd-0d35-4ae0-8fc7-99b372ae01a8/1771986103864-242c11a0/2001_shinning_mew_corocoro.jpeg" alt="Shining Mew CoroCoro PSA 8" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">Shining Mew PSA 8</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$1,100</span>
+                                <iconify-icon icon="lucide:minus" class="text-[#666666] text-base"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: E3 Stamp Red Cheeks Pikachu PSA 9 — AT MARKET -->
+                    <div class="card-tile bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/uploads/32244cbd-0d35-4ae0-8fc7-99b372ae01a8/1771986216035-730d78ee/1999_POKEMON_BASE_SET_E3_STAMP_RED_CHEEKS__58_PIKACHU_PSA_9.jpg" alt="E3 Stamp Red Cheeks Pikachu PSA 9" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">E3 Pikachu #58 PSA 9</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$1,320</span>
+                                <iconify-icon icon="lucide:minus" class="text-[#666666] text-base"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="px-4 pt-2 pb-6 border-t border-[#2a2a2a] bg-[#0a0a0a] flex justify-around">
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:rss" class="text-xl"></iconify-icon>
+                    <span>Feed</span>
+                </div>
+                <div class="tab-item active">
+                    <iconify-icon icon="lucide:compass" class="text-xl"></iconify-icon>
+                    <span>Explore</span>
+                </div>
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:layout-grid" class="text-xl"></iconify-icon>
+                    <span>Portfolio</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================== -->
+        <!-- SCENE 3: Save to Watch   -->
+        <!-- ======================== -->
+        <div class="scene" id="scene-3">
+            <!-- Status bar -->
+            <div class="pt-12 px-4 pb-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-[#dfff00] animate-breathe"></div>
+                    <span class="text-xs text-[#dfff00] font-medium">Scanning 4 vintage targets</span>
+                </div>
+                <span class="text-xs text-[#666666]">Just now</span>
+            </div>
+
+            <div class="flex-1 px-4 overflow-hidden">
+                <!-- Search bar -->
+                <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl px-4 py-3 flex items-center gap-2 mb-3">
+                    <iconify-icon icon="lucide:search" class="text-[#666666] text-base"></iconify-icon>
+                    <span class="text-sm text-[#666666]">vintage pokemon cards</span>
+                </div>
+
+                <!-- Filter chips -->
+                <div class="flex gap-2 mb-4 overflow-x-auto">
+                    <span class="text-xs bg-[#141414] border border-[#dfff00] text-[#dfff00] px-3 py-1.5 rounded-full font-medium whitespace-nowrap">PSA Graded</span>
+                    <span class="text-xs bg-[#141414] border border-[#2a2a2a] text-[#999999] px-3 py-1.5 rounded-full font-medium whitespace-nowrap">Strong Buy</span>
+                    <span class="text-xs bg-[#141414] border border-[#2a2a2a] text-[#999999] px-3 py-1.5 rounded-full font-medium whitespace-nowrap">Under $20k</span>
+                </div>
+
+                <!-- Card grid — Charizard highlighted -->
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- HIGHLIGHTED Charizard — STRONG BUY -->
+                    <div class="bg-[#1a1a1a] rounded-xl overflow-hidden relative transition-all duration-300" id="card-highlight"
+                         style="border: 2px solid #2a2a2a;">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden relative">
+                            <img src="https://imagedelivery.net/r95GEZrC907pw2jCMpDPbQ/417f54f0-0b4c-44db-0d56-5e4ccdfffa00/public" alt="Charizard Holo PSA 7" class="card-img">
+                            <!-- Bookmark icon -->
+                            <div class="absolute top-2 left-2 opacity-0 transition-all duration-300" id="bookmark-icon">
+                                <iconify-icon icon="lucide:bookmark" class="text-lg text-[#dfff00]" style="fill: #dfff00;"></iconify-icon>
+                            </div>
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">Charizard #4 PSA 7</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$18,000</span>
+                                <iconify-icon icon="lucide:chevrons-down" class="text-[#00E676] text-lg"></iconify-icon>
+                            </div>
+                        </div>
+                        <!-- Tap ripple -->
+                        <div class="tap-ring" id="tap-ripple" style="top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+                    </div>
+
+                    <!-- Other 3 cards dimmed — AT MARKET -->
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden transition-opacity duration-300" id="dim-1">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/uploads/32244cbd-0d35-4ae0-8fc7-99b372ae01a8/1771986739732-e351ee1e/1999_POKEMON_BASE_SET_UNLIMITED__2_BLASTOISE-HOLO_PSA_9.jpg" alt="Blastoise Holo PSA 9" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">Blastoise #2 PSA 9</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$990</span>
+                                <iconify-icon icon="lucide:minus" class="text-[#666666] text-base"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden transition-opacity duration-300" id="dim-2">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/uploads/32244cbd-0d35-4ae0-8fc7-99b372ae01a8/1771986103864-242c11a0/2001_shinning_mew_corocoro.jpeg" alt="Shining Mew CoroCoro PSA 8" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">Shining Mew PSA 8</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$1,100</span>
+                                <iconify-icon icon="lucide:minus" class="text-[#666666] text-base"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden transition-opacity duration-300" id="dim-3">
+                        <div class="h-[220px] bg-[#141414] overflow-hidden">
+                            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/uploads/32244cbd-0d35-4ae0-8fc7-99b372ae01a8/1771986216035-730d78ee/1999_POKEMON_BASE_SET_E3_STAMP_RED_CHEEKS__58_PIKACHU_PSA_9.jpg" alt="E3 Stamp Red Cheeks Pikachu PSA 9" class="card-img">
+                        </div>
+                        <div class="px-3 py-2">
+                            <p class="text-[10px] text-[#666666] truncate mb-0.5">E3 Pikachu #58 PSA 9</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-bold text-[#ffffff]">$1,320</span>
+                                <iconify-icon icon="lucide:minus" class="text-[#666666] text-base"></iconify-icon>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toast notification -->
+            <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-[#1a1a1a] border border-[#dfff00] rounded-xl px-4 py-3 flex items-center gap-2 opacity-0 z-30 whitespace-nowrap" id="toast-watchlist">
+                <iconify-icon icon="lucide:bookmark" class="text-[#dfff00]" style="fill: #dfff00;"></iconify-icon>
+                <span class="text-sm text-[#ffffff] font-medium">Charizard #4 PSA 7 added to Watchlist</span>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="px-4 pt-2 pb-6 border-t border-[#2a2a2a] bg-[#0a0a0a] flex justify-around">
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:rss" class="text-xl"></iconify-icon>
+                    <span>Feed</span>
+                </div>
+                <div class="tab-item active">
+                    <iconify-icon icon="lucide:compass" class="text-xl"></iconify-icon>
+                    <span>Explore</span>
+                </div>
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:layout-grid" class="text-xl"></iconify-icon>
+                    <span>Portfolio</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================== -->
+        <!-- SCENE 4: Chat Alert      -->
+        <!-- ======================== -->
+        <div class="scene" id="scene-4">
+            <!-- Chat header -->
+            <div class="pt-12 px-4 pb-3 flex items-center gap-3 border-b border-[#2a2a2a]">
+                <div class="w-8 h-8 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center">
+                    <iconify-icon icon="lucide:zap" class="text-sm text-[#dfff00]"></iconify-icon>
+                </div>
+                <div>
+                    <p class="text-sm font-semibold text-[#ffffff]">Gacha Agent</p>
+                    <div class="flex items-center gap-1">
+                        <div class="w-1.5 h-1.5 rounded-full bg-[#00E676]"></div>
+                        <span class="text-[10px] text-[#999999]">Active - scanning 4 cards</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 px-4 py-4 overflow-hidden flex flex-col gap-3">
+                <!-- Agent message 1: deal alert -->
+                <div class="flex gap-2 items-end opacity-0" id="chat-msg-1">
+                    <div class="w-6 h-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center flex-shrink-0">
+                        <iconify-icon icon="lucide:zap" class="text-[10px] text-[#dfff00]"></iconify-icon>
+                    </div>
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl rounded-bl-md px-4 py-3 max-w-[280px]">
+                        <p class="text-xs text-[#ffffff] leading-relaxed">Your watchlist card <span class="font-semibold">1999 Pokemon Game Charizard #4 PSA 7</span> has a new listing <span class="text-[#00E676] font-semibold">27% below FMV</span>.</p>
+                    </div>
+                </div>
+
+                <!-- Agent message 2: card preview -->
+                <div class="flex gap-2 items-end opacity-0" id="chat-msg-2">
+                    <div class="w-6 flex-shrink-0"></div>
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl rounded-bl-md overflow-hidden max-w-[280px]">
+                        <div class="flex gap-3 p-3">
+                            <div class="w-12 h-[60px] bg-[#141414] rounded-lg overflow-hidden flex-shrink-0">
+                                <img src="https://imagedelivery.net/r95GEZrC907pw2jCMpDPbQ/417f54f0-0b4c-44db-0d56-5e4ccdfffa00/public" alt="Charizard Holo PSA 7" class="w-full h-full object-cover object-top">
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-[#ffffff]">Charizard #4 - PSA 7</p>
+                                <p class="text-[10px] text-[#999999]">1999 Pokemon Game - eBay BIN</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <span class="text-sm font-bold text-[#ffffff]">$18,000</span>
+                                    <span class="text-[10px] text-[#999999] line-through">$24,500</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-3 pb-3">
+                            <div class="deal-bar-track">
+                                <div class="deal-bar-fill bg-[#00E676]" style="width: 0%" data-width="73%" id="feed-deal-bar"></div>
+                            </div>
+                            <div class="flex justify-between mt-1">
+                                <span class="text-[10px] text-[#00E676] font-semibold">Score: 91 — STRONG BUY</span>
+                                <span class="text-[10px] text-[#666666]">Seller 99.8%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agent message 3: question -->
+                <div class="flex gap-2 items-end opacity-0" id="chat-msg-3">
+                    <div class="w-6 h-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center flex-shrink-0">
+                        <iconify-icon icon="lucide:zap" class="text-[10px] text-[#dfff00]"></iconify-icon>
+                    </div>
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl rounded-bl-md px-4 py-3 max-w-[280px]">
+                        <p class="text-xs text-[#ffffff] leading-relaxed">Do you want to buy? This is within your $20k budget.</p>
+                    </div>
+                </div>
+
+                <!-- Action buttons (inline reply style) -->
+                <div class="flex gap-2 ml-8 opacity-0" id="chat-actions">
+                    <button class="bg-[#00E676] text-black font-semibold text-xs px-5 py-2.5 rounded-full transition-all duration-200" id="buy-now-btn">
+                        Buy - $18,000
+                    </button>
+                    <button class="bg-[#141414] border border-[#2a2a2a] text-[#999999] text-xs px-4 py-2.5 rounded-full">
+                        Keep waiting
+                    </button>
+                </div>
+
+                <!-- User reply (appears after "Buy" tap) -->
+                <div class="flex justify-end opacity-0" id="chat-user-reply">
+                    <div class="bg-[#dfff00] rounded-2xl rounded-br-md px-4 py-2.5 max-w-[200px]">
+                        <p class="text-xs text-black font-medium">Buy it</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="px-4 pt-2 pb-6 border-t border-[#2a2a2a] bg-[#0a0a0a] flex justify-around">
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:rss" class="text-xl"></iconify-icon>
+                    <span>Feed</span>
+                </div>
+                <div class="tab-item active">
+                    <iconify-icon icon="lucide:compass" class="text-xl"></iconify-icon>
+                    <span>Chat</span>
+                </div>
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:layout-grid" class="text-xl"></iconify-icon>
+                    <span>Portfolio</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================== -->
+        <!-- SCENE 5: Buy Confirm     -->
+        <!-- ======================== -->
+        <div class="scene" id="scene-5">
+            <!-- Chat header -->
+            <div class="pt-12 px-4 pb-3 flex items-center gap-3 border-b border-[#2a2a2a]">
+                <div class="w-8 h-8 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center">
+                    <iconify-icon icon="lucide:zap" class="text-sm text-[#dfff00]"></iconify-icon>
+                </div>
+                <div>
+                    <p class="text-sm font-semibold text-[#ffffff]">Gacha Agent</p>
+                    <div class="flex items-center gap-1">
+                        <div class="w-1.5 h-1.5 rounded-full bg-[#00E676]"></div>
+                        <span class="text-[10px] text-[#999999]">Active</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 px-4 py-4 overflow-hidden flex flex-col gap-3 relative">
+                <!-- Previous messages (dimmed) -->
+                <div class="opacity-30 flex flex-col gap-3">
+                    <div class="flex gap-2 items-end">
+                        <div class="w-6 h-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full flex items-center justify-center flex-shrink-0">
+                            <iconify-icon icon="lucide:zap" class="text-[10px] text-[#dfff00]"></iconify-icon>
+                        </div>
+                        <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl rounded-bl-md px-4 py-3 max-w-[280px]">
+                            <p class="text-xs text-[#ffffff] leading-relaxed">Charizard #4 PSA 7 — listing 27% below FMV. Buy?</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <div class="bg-[#dfff00] rounded-2xl rounded-br-md px-4 py-2.5">
+                            <p class="text-xs text-black font-medium">Buy it</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Purchase confirmation overlay -->
+                <div class="absolute inset-0 flex items-center justify-center z-20" id="confirm-overlay">
+                    <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-8 text-center mx-8 opacity-0 scale-95 transition-all duration-400" id="confirm-card">
+                        <!-- Checkmark circle -->
+                        <div class="w-16 h-16 rounded-full bg-[#00E676]/10 border-2 border-[#00E676] flex items-center justify-center mx-auto mb-4" id="check-circle">
+                            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" id="check-svg">
+                                <path d="M6 14L12 20L22 8" stroke="#00E676" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                                      stroke-dasharray="30" stroke-dashoffset="30" id="check-path"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-bold text-[#ffffff] mb-1">Purchase Confirmed</h3>
+                        <p class="text-sm text-[#999999] mb-3">1999 Pokemon Game Charizard #4 - PSA 7</p>
+                        <div class="bg-[#141414] rounded-lg px-4 py-3 inline-block">
+                            <span class="text-xl font-bold text-[#ffffff]">$18,000</span>
+                        </div>
+                        <p class="text-xs text-[#00E676] mt-3 font-medium">Saved $6,500 vs market price</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="px-4 pt-2 pb-6 border-t border-[#2a2a2a] bg-[#0a0a0a] flex justify-around">
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:rss" class="text-xl"></iconify-icon>
+                    <span>Feed</span>
+                </div>
+                <div class="tab-item active">
+                    <iconify-icon icon="lucide:compass" class="text-xl"></iconify-icon>
+                    <span>Chat</span>
+                </div>
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:layout-grid" class="text-xl"></iconify-icon>
+                    <span>Portfolio</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================== -->
+        <!-- SCENE 6: Portfolio       -->
+        <!-- ======================== -->
+        <div class="scene" id="scene-6">
+            <!-- Status bar -->
+            <div class="pt-12 px-4 pb-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-[#dfff00] animate-breathe"></div>
+                    <span class="text-xs text-[#dfff00] font-medium">Monitoring 1 holding</span>
+                </div>
+                <iconify-icon icon="lucide:settings" class="text-[#666666] text-base"></iconify-icon>
+            </div>
+
+            <div class="flex-1 px-4 overflow-hidden">
+                <h3 class="text-lg font-bold text-[#ffffff] mb-4">Portfolio</h3>
+
+                <!-- Summary banner -->
+                <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4 mb-4 opacity-0" id="portfolio-summary">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-xs text-[#999999] mb-1">Total Value</p>
+                            <p class="text-2xl font-bold text-[#ffffff]" id="portfolio-value">$0</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-[#999999] mb-1">Total P&L</p>
+                            <p class="text-lg font-bold text-[#00E676]" id="portfolio-pnl">+$0</p>
+                            <p class="text-xs text-[#00E676]" id="portfolio-pct">(+0%)</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-[#999999]">
+                        <iconify-icon icon="lucide:wallet" class="text-sm"></iconify-icon>
+                        <span>1 card - Cost basis: $18,000</span>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex gap-4 mb-4 border-b border-[#2a2a2a] pb-2">
+                    <span class="text-sm font-semibold text-[#ffffff] border-b-2 border-[#dfff00] pb-2">Holdings</span>
+                    <span class="text-sm text-[#666666] pb-2">Watchlist</span>
+                </div>
+
+                <!-- Holding card -->
+                <div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden opacity-0" id="holding-card">
+                    <div class="flex gap-3 p-4">
+                        <div class="w-16 h-[80px] bg-[#141414] rounded-lg overflow-hidden flex-shrink-0">
+                            <img src="https://imagedelivery.net/r95GEZrC907pw2jCMpDPbQ/417f54f0-0b4c-44db-0d56-5e4ccdfffa00/public" alt="Charizard Holo PSA 7" class="w-full h-full object-cover object-top">
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold text-[#ffffff]">1999 Pokemon Game Charizard #4</p>
+                                    <p class="text-xs text-[#999999]">PSA 7 - Holo</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid grid-cols-3 gap-2">
+                                <div>
+                                    <p class="text-[10px] text-[#666666] uppercase tracking-wide">Cost</p>
+                                    <p class="text-xs font-semibold text-[#ffffff]">$18,000</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] text-[#666666] uppercase tracking-wide">Value</p>
+                                    <p class="text-xs font-semibold text-[#ffffff]" id="hold-value">$24,500</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] text-[#666666] uppercase tracking-wide">P&L</p>
+                                    <p class="text-xs font-bold text-[#00E676]" id="hold-pnl">+$6,500</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- P&L bar -->
+                    <div class="px-4 pb-3">
+                        <div class="deal-bar-track">
+                            <div class="deal-bar-fill bg-[#00E676]" style="width: 0%" data-width="36%" id="pnl-bar"></div>
+                        </div>
+                        <div class="flex justify-between mt-1">
+                            <span class="text-[10px] text-[#00E676] font-semibold">+36.1% return</span>
+                            <span class="text-[10px] text-[#666666]">Acquired today</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Price alert notification -->
+                <div class="bg-[#141414] border border-[#00E676] rounded-xl p-4 mt-3 opacity-0" id="price-alert">
+                    <div class="flex items-center gap-2 mb-2">
+                        <iconify-icon icon="lucide:trending-up" class="text-[#00E676]"></iconify-icon>
+                        <span class="text-xs text-[#00E676] font-semibold">Price Alert</span>
+                    </div>
+                    <p class="text-xs text-[#ffffff] leading-relaxed mb-1">Your Charizard #4 jumped <span class="text-[#00E676] font-bold">+30%</span> in value!</p>
+                    <p class="text-xs text-[#999999] leading-relaxed mb-3">Someone is bidding <span class="text-[#ffffff] font-semibold">$23,400</span> on eBay.</p>
+                    <div class="flex gap-2 opacity-0" id="sell-actions">
+                        <button class="bg-[#00E676] text-black font-semibold text-xs px-5 py-2 rounded-full" id="sell-btn">Sell Now</button>
+                        <button class="bg-transparent border border-[#2a2a2a] text-[#999999] text-xs px-4 py-2 rounded-full">Set Price</button>
+                    </div>
+                </div>
+
+                <!-- User sell reply -->
+                <div class="flex justify-end mt-3 opacity-0" id="sell-reply">
+                    <div class="bg-[#dfff00] rounded-2xl rounded-br-md px-4 py-2.5 max-w-[240px]">
+                        <p class="text-xs text-black font-medium">sell at 60% above what I paid</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="px-4 pt-2 pb-6 border-t border-[#2a2a2a] bg-[#0a0a0a] flex justify-around">
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:rss" class="text-xl"></iconify-icon>
+                    <span>Feed</span>
+                </div>
+                <div class="tab-item">
+                    <iconify-icon icon="lucide:compass" class="text-xl"></iconify-icon>
+                    <span>Explore</span>
+                </div>
+                <div class="tab-item active">
+                    <iconify-icon icon="lucide:layout-grid" class="text-xl"></iconify-icon>
+                    <span>Portfolio</span>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /phone -->
+
+    <!-- Step indicators -->
+    <div class="flex items-center gap-3" id="step-dots">
+        <div class="step-dot active"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+    </div>
+
+    <!-- Step label -->
+    <p class="text-sm text-[#999999] h-5" id="step-label">Set your goal</p>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    const SCENES = [
+        { id: 'scene-1', label: 'Set your goal',       duration: 6500 },
+        { id: 'scene-2', label: 'Explore deals',       duration: 4500 },
+        { id: 'scene-3', label: 'Save to watchlist',   duration: 4000 },
+        { id: 'scene-4', label: 'Agent finds a deal',   duration: 6000 },
+        { id: 'scene-5', label: 'Buy the deal',        duration: 4000 },
+        { id: 'scene-6', label: 'Track your portfolio', duration: 5500 },
+    ];
+
+    let currentScene = 0;
+    let loopTimer = null;
+    const timeouts = [];
+
+    function clearAllTimeouts() {
+        timeouts.forEach(t => clearTimeout(t));
+        timeouts.length = 0;
+        if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+    }
+
+    function delay(ms) {
+        return new Promise(resolve => {
+            const t = setTimeout(resolve, ms);
+            timeouts.push(t);
+        });
+    }
+
+    function switchScene(index) {
+        document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+        document.getElementById(SCENES[index].id).classList.add('active');
+
+        // Update dots
+        document.querySelectorAll('#step-dots .step-dot').forEach((dot, i) => {
+            dot.className = 'step-dot';
+            if (i < index) dot.classList.add('done');
+            if (i === index) dot.classList.add('active');
+        });
+
+        // Update label
+        document.getElementById('step-label').textContent = SCENES[index].label;
+    }
+
+    // ---- Scene Animations ----
+
+    async function playScene1() {
+        const text = "investing $20k in vintage pokemon cards";
+        const typedEl = document.getElementById('typed-text');
+        const cursorEl = document.getElementById('typing-cursor');
+        const btnEl = document.getElementById('goal-btn');
+        const analyzeEl = document.getElementById('analyzing-state');
+
+        // Reset
+        typedEl.textContent = '';
+        cursorEl.style.display = 'inline';
+        btnEl.style.background = '#2a2a2a';
+        btnEl.style.color = '#666666';
+        analyzeEl.style.opacity = '0';
+
+        await delay(800);
+
+        // Type character by character
+        for (let i = 0; i < text.length; i++) {
+            typedEl.textContent += text[i];
+            await delay(45 + Math.random() * 30);
+        }
+
+        cursorEl.style.display = 'none';
+        await delay(300);
+
+        // Activate button
+        btnEl.style.background = '#dfff00';
+        btnEl.style.color = '#000000';
+        await delay(600);
+
+        // Press button
+        btnEl.style.transform = 'scale(0.97)';
+        await delay(150);
+        btnEl.style.transform = 'scale(1)';
+
+        // Show analyzing
+        analyzeEl.style.opacity = '1';
+        await delay(1200);
+    }
+
+    async function playScene2() {
+        const grid = document.getElementById('explore-grid');
+        const tiles = grid.querySelectorAll('.card-tile');
+
+        // Reset tiles
+        tiles.forEach(t => { t.classList.remove('visible'); t.style.opacity = '0'; t.style.transform = 'translateY(20px)'; });
+
+        await delay(200);
+
+        // Stagger card entrance
+        for (let i = 0; i < tiles.length; i++) {
+            tiles[i].classList.add('visible');
+            await delay(200);
+        }
+
+        await delay(1500);
+    }
+
+    async function playScene3() {
+        const highlight = document.getElementById('card-highlight');
+        const bookmark = document.getElementById('bookmark-icon');
+        const toast = document.getElementById('toast-watchlist');
+        const dims = [document.getElementById('dim-1'), document.getElementById('dim-2'), document.getElementById('dim-3')];
+        const ripple = document.getElementById('tap-ripple');
+
+        // Reset
+        highlight.style.borderColor = '#2a2a2a';
+        highlight.style.boxShadow = 'none';
+        bookmark.style.opacity = '0';
+        toast.style.opacity = '0';
+        dims.forEach(d => d.style.opacity = '1');
+
+        await delay(180);
+
+        // Dim other cards
+        dims.forEach(d => { d.style.opacity = '0.35'; });
+        await delay(120);
+
+        // Highlight + glow
+        highlight.style.borderColor = '#dfff00';
+        highlight.style.animation = 'glowPulse 1.5s ease-in-out infinite';
+        await delay(120);
+
+        // Tap ripple
+        ripple.classList.add('animate');
+        await delay(180);
+        ripple.classList.remove('animate');
+
+        // Show bookmark
+        bookmark.style.opacity = '1';
+        bookmark.style.animation = 'popIn 0.4s ease-out forwards';
+        await delay(120);
+
+        // Show toast
+        toast.style.animation = 'toastIn 0.3s ease-out forwards';
+        toast.style.opacity = '1';
+        await delay(500);
+
+        // Hide toast
+        toast.style.animation = 'toastOut 0.3s ease-in forwards';
+        await delay(120);
+
+        // Cleanup
+        highlight.style.animation = '';
+    }
+
+    async function playScene4() {
+        const msg1 = document.getElementById('chat-msg-1');
+        const msg2 = document.getElementById('chat-msg-2');
+        const msg3 = document.getElementById('chat-msg-3');
+        const actions = document.getElementById('chat-actions');
+        const userReply = document.getElementById('chat-user-reply');
+        const dealBar = document.getElementById('feed-deal-bar');
+        const buyBtn = document.getElementById('buy-now-btn');
+
+        // Reset all
+        [msg1, msg2, msg3, actions, userReply].forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(12px)';
+        });
+        dealBar.style.width = '0%';
+        buyBtn.style.animation = '';
+
+        await delay(500);
+
+        // Message 1: deal alert text
+        msg1.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
+        msg1.style.opacity = '1';
+        msg1.style.transform = 'translateY(0)';
+        await delay(800);
+
+        // Message 2: card preview
+        msg2.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
+        msg2.style.opacity = '1';
+        msg2.style.transform = 'translateY(0)';
+        await delay(400);
+
+        // Animate deal bar inside card preview
+        dealBar.style.width = dealBar.dataset.width;
+        await delay(600);
+
+        // Message 3: "Do you want to buy?"
+        msg3.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
+        msg3.style.opacity = '1';
+        msg3.style.transform = 'translateY(0)';
+        await delay(500);
+
+        // Show action buttons
+        actions.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        actions.style.opacity = '1';
+        actions.style.transform = 'translateY(0)';
+
+        // Pulse the buy button
+        buyBtn.style.animation = 'pulse 1.5s ease-in-out infinite';
+        await delay(2000);
+
+        // User taps Buy — show reply bubble
+        buyBtn.style.animation = '';
+        buyBtn.style.transform = 'scale(0.95)';
+        await delay(100);
+        buyBtn.style.transform = 'scale(1)';
+
+        // Hide actions, show user reply
+        actions.style.opacity = '0.4';
+        userReply.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        userReply.style.opacity = '1';
+        userReply.style.transform = 'translateY(0)';
+        await delay(800);
+    }
+
+    async function playScene5() {
+        const confirmCard = document.getElementById('confirm-card');
+        const checkPath = document.getElementById('check-path');
+
+        // Reset
+        confirmCard.style.opacity = '0';
+        confirmCard.style.transform = 'scale(0.95)';
+        checkPath.style.strokeDashoffset = '30';
+
+        await delay(600);
+
+        // Pop in confirmation card
+        confirmCard.style.transition = 'opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        confirmCard.style.opacity = '1';
+        confirmCard.style.transform = 'scale(1)';
+        await delay(500);
+
+        // Draw checkmark
+        checkPath.style.transition = 'stroke-dashoffset 0.5s ease-out';
+        checkPath.style.strokeDashoffset = '0';
+        await delay(2500);
+    }
+
+    async function playScene6() {
+        const summary = document.getElementById('portfolio-summary');
+        const holding = document.getElementById('holding-card');
+        const priceAlert = document.getElementById('price-alert');
+        const sellActions = document.getElementById('sell-actions');
+        const sellReply = document.getElementById('sell-reply');
+        const sellBtn = document.getElementById('sell-btn');
+        const pnlBar = document.getElementById('pnl-bar');
+        const valueEl = document.getElementById('portfolio-value');
+        const pnlEl = document.getElementById('portfolio-pnl');
+        const pctEl = document.getElementById('portfolio-pct');
+
+        // Reset
+        summary.style.opacity = '0'; summary.style.transform = 'translateY(16px)';
+        holding.style.opacity = '0'; holding.style.transform = 'translateY(16px)';
+        priceAlert.style.opacity = '0'; priceAlert.style.transform = 'translateY(16px)';
+        sellActions.style.opacity = '0';
+        sellReply.style.opacity = '0'; sellReply.style.transform = 'translateY(8px)';
+        pnlBar.style.width = '0%';
+        valueEl.textContent = '$0';
+        pnlEl.textContent = '+$0';
+        pctEl.textContent = '(+0%)';
+
+        await delay(400);
+
+        // Animate summary in
+        summary.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+        summary.style.opacity = '1';
+        summary.style.transform = 'translateY(0)';
+        await delay(200);
+
+        // Count up value
+        animateCount(valueEl, 0, 24500, 800, v => '$' + v.toLocaleString());
+        animateCount(pnlEl, 0, 6500, 800, v => '+$' + v.toLocaleString());
+        await delay(900);
+        pctEl.textContent = '(+36.1%)';
+
+        await delay(300);
+
+        // Animate holding in
+        holding.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+        holding.style.opacity = '1';
+        holding.style.transform = 'translateY(0)';
+        await delay(400);
+
+        // Animate P&L bar
+        pnlBar.style.transition = 'width 0.8s ease-out';
+        pnlBar.style.width = pnlBar.dataset.width;
+        await delay(600);
+
+        // Price alert notification slides in
+        priceAlert.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+        priceAlert.style.opacity = '1';
+        priceAlert.style.transform = 'translateY(0)';
+        await delay(600);
+
+        // Show sell action buttons
+        sellActions.style.transition = 'opacity 0.3s ease-out';
+        sellActions.style.opacity = '1';
+        await delay(1200);
+
+        // User types their sell condition
+        sellReply.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        sellReply.style.opacity = '1';
+        sellReply.style.transform = 'translateY(0)';
+        await delay(1500);
+    }
+
+    function animateCount(el, from, to, durationMs, format) {
+        const start = performance.now();
+        function tick(now) {
+            const progress = Math.min((now - start) / durationMs, 1);
+            const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+            const current = Math.round(from + (to - from) * eased);
+            el.textContent = format(current);
+            if (progress < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    }
+
+    const scenePlayFns = [playScene1, playScene2, playScene3, playScene4, playScene5, playScene6];
+
+    async function runLoop() {
+        while (true) {
+            for (let i = 0; i < SCENES.length; i++) {
+                currentScene = i;
+                switchScene(i);
+                await scenePlayFns[i]();
+                // Brief pause before next scene
+                await delay(800);
+            }
+            // Pause before restarting loop
+            await delay(1500);
+        }
+    }
+
+    // Start after page loads
+    window.addEventListener('DOMContentLoaded', () => {
+        // Small delay for fonts/icons to load
+        setTimeout(() => runLoop(), 500);
+    });
+})();
+</script>
+
+</body>
+</html>

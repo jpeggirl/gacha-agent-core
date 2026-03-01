@@ -1,123 +1,151 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WatchlistManager } from './manager.js';
-import type { StorageAdapter, ResolvedCard } from '../types/index.js';
-
-class InMemoryStorage implements StorageAdapter {
-  private data: Map<string, unknown> = new Map();
-
-  async get<T>(key: string): Promise<T | null> {
-    const val = this.data.get(key);
-    return val !== undefined ? (val as T) : null;
-  }
-
-  async set<T>(key: string, value: T): Promise<void> {
-    this.data.set(key, value);
-  }
-
-  async delete(key: string): Promise<boolean> {
-    return this.data.delete(key);
-  }
-
-  async list(prefix: string): Promise<string[]> {
-    return Array.from(this.data.keys()).filter((k) => k.startsWith(prefix));
-  }
-}
-
-const testCard: ResolvedCard = {
-  id: 'base1-4',
-  name: 'Charizard',
-  setName: 'Base Set',
-  setCode: 'base1',
-  number: '4',
-  year: 1999,
-  confidence: 0.95,
-};
+import { InMemoryStorage } from '../mocks/in-memory-storage.js';
 
 describe('WatchlistManager', () => {
+  let storage: InMemoryStorage;
   let manager: WatchlistManager;
 
   beforeEach(() => {
-    manager = new WatchlistManager(new InMemoryStorage());
+    storage = new InMemoryStorage();
+    manager = new WatchlistManager(storage);
   });
 
-  it('adds an entry and retrieves it', async () => {
+  it('adds a watchlist entry', async () => {
     const entry = await manager.add({
-      userId: 'user1',
-      card: testCard,
-      targetPrice: 5000,
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
+      setName: 'Base Set',
     });
 
     expect(entry.id).toBeTruthy();
-    expect(entry.card.name).toBe('Charizard');
-    expect(entry.targetPrice).toBe(5000);
-    expect(entry.active).toBe(true);
-
-    const retrieved = await manager.get(entry.id);
-    expect(retrieved).toEqual(entry);
+    expect(entry.email).toBe('test@example.com');
+    expect(entry.cardId).toBe('416');
+    expect(entry.grade).toBe(10);
+    expect(entry.grader).toBe('PSA');
+    expect(entry.cardName).toBe('Charizard');
+    expect(entry.setName).toBe('Base Set');
+    expect(entry.createdAt).toBeTruthy();
   });
 
-  it('lists entries by user', async () => {
-    await manager.add({ userId: 'user1', card: testCard, targetPrice: 5000 });
-    await manager.add({ userId: 'user1', card: testCard, targetPrice: 3000 });
-    await manager.add({ userId: 'user2', card: testCard, targetPrice: 4000 });
-
-    const user1Entries = await manager.listByUser('user1');
-    expect(user1Entries).toHaveLength(2);
-
-    const user2Entries = await manager.listByUser('user2');
-    expect(user2Entries).toHaveLength(1);
-  });
-
-  it('updates an entry', async () => {
-    const entry = await manager.add({
-      userId: 'user1',
-      card: testCard,
-      targetPrice: 5000,
+  it('deduplicates by email + cardId + grade', async () => {
+    const first = await manager.add({
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
     });
 
-    const updated = await manager.update(entry.id, { targetPrice: 4500 });
-    expect(updated?.targetPrice).toBe(4500);
+    const second = await manager.add({
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
+    });
+
+    expect(second.id).toBe(first.id);
+
+    const entries = await manager.getByEmail('test@example.com');
+    expect(entries).toHaveLength(1);
   });
 
-  it('removes an entry', async () => {
+  it('allows same card at different grades', async () => {
+    await manager.add({
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 9,
+      cardName: 'Charizard',
+    });
+
+    await manager.add({
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
+    });
+
+    const entries = await manager.getByEmail('test@example.com');
+    expect(entries).toHaveLength(2);
+  });
+
+  it('normalizes email to lowercase', async () => {
+    await manager.add({
+      email: 'Test@Example.COM',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
+    });
+
+    const entries = await manager.getByEmail('test@example.com');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.email).toBe('test@example.com');
+  });
+
+  it('getByEmail returns empty for unknown email', async () => {
+    const entries = await manager.getByEmail('nobody@example.com');
+    expect(entries).toEqual([]);
+  });
+
+  it('removes an entry by id', async () => {
     const entry = await manager.add({
-      userId: 'user1',
-      card: testCard,
-      targetPrice: 5000,
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
     });
 
     const removed = await manager.remove(entry.id);
     expect(removed).toBe(true);
 
-    const entries = await manager.listByUser('user1');
+    const entries = await manager.getByEmail('test@example.com');
     expect(entries).toHaveLength(0);
   });
 
-  it('lists active entries across all users', async () => {
-    const e1 = await manager.add({
-      userId: 'user1',
-      card: testCard,
-      targetPrice: 5000,
-    });
-    await manager.add({ userId: 'user2', card: testCard, targetPrice: 3000 });
-
-    // Deactivate one
-    await manager.update(e1.id, { active: false });
-
-    const active = await manager.listActive();
-    expect(active).toHaveLength(1);
-    expect(active[0]!.userId).toBe('user2');
+  it('remove returns false for nonexistent id', async () => {
+    const removed = await manager.remove('nonexistent-id');
+    expect(removed).toBe(false);
   });
 
-  it('marks entry as scanned', async () => {
-    const entry = await manager.add({
-      userId: 'user1',
-      card: testCard,
-      targetPrice: 5000,
+  it('returns entries sorted newest first', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00Z'));
+
+    await manager.add({
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
     });
 
-    await manager.markScanned(entry.id);
-    const updated = await manager.get(entry.id);
-    expect(updated?.lastScannedAt).toBeTruthy();
+    vi.setSystemTime(new Date('2025-01-02T00:00:00Z'));
+
+    await manager.add({
+      email: 'test@example.com',
+      cardId: '444',
+      grade: 9,
+      cardName: 'Pikachu',
+    });
+
+    vi.useRealTimers();
+
+    const entries = await manager.getByEmail('test@example.com');
+    expect(entries).toHaveLength(2);
+    // Second added should be first (newest)
+    expect(entries[0]!.cardName).toBe('Pikachu');
+    expect(entries[1]!.cardName).toBe('Charizard');
+  });
+
+  it('preserves imageUrl if provided', async () => {
+    const entry = await manager.add({
+      email: 'test@example.com',
+      cardId: '416',
+      grade: 10,
+      cardName: 'Charizard',
+      imageUrl: 'https://example.com/charizard.png',
+    });
+
+    expect(entry.imageUrl).toBe('https://example.com/charizard.png');
   });
 });

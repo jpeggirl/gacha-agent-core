@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gacha Pro — Pokemon Card Trading Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Space Grotesk', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 3px; }
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #0a0a0a 25%, #141414 50%, #0a0a0a 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: fade-in 0.25s ease-out; }
+        .pill-active { background: #f97316; color: #fff; }
+        .pill-inactive { background: #0a0a0a; color: #737373; border: 1px solid #1a1a1a; }
+        .pill-inactive:hover { border-color: #f97316; color: #ffffff; }
+        .score-bar { transition: width 0.4s ease-out; }
+        .modal-overlay { background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); }
+        .table-row-hover { transition: background-color 0.15s ease; }
+        .table-row-hover:hover { background-color: #111111; }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .live-dot { animation: pulse-dot 2s ease-in-out infinite; }
+        .deals-tab { cursor: pointer; transition: all 0.15s ease; }
+        .deals-tab-active { color: #f97316; border-bottom: 2px solid #f97316; }
+        .deals-tab-inactive { color: #737373; border-bottom: 2px solid transparent; }
+        .deals-tab-inactive:hover { color: #ffffff; }
+        .tab-panel { display: none; }
+        .tab-panel-active { display: block; }
+        /* Click-to-toggle tooltips (works on mobile + desktop) */
+        .tip-trigger { cursor: help; position: relative; }
+        .tip-body { display: none; position: absolute; right: 0; bottom: 100%; margin-bottom: 4px; z-index: 50; }
+        .tip-trigger.tip-open > .tip-body { display: block; }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col">
+
+<div id="app" class="flex flex-col min-h-screen">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 bg-black/95 backdrop-blur border-b border-[#1a1a1a]">
+        <div class="max-w-6xl mx-auto px-4 h-12 flex items-center gap-3">
+            <a href="#/" class="flex items-center gap-2 flex-shrink-0">
+                <img src="https://pull.gacha.game/logo-sm.webp" alt="Gacha logo" class="w-7 h-7 rounded-md object-cover" />
+                <span class="text-sm font-bold tracking-tight hidden sm:block">GACHA<span class="text-[#f97316] ml-0.5">TRADE</span></span>
+            </a>
+            <div class="flex-1 max-w-lg mx-auto">
+                <div class="relative">
+                    <input
+                        id="search-input"
+                        type="text"
+                        placeholder="Search cards..."
+                        class="w-full bg-[#111] border border-[#222] rounded-md px-4 py-1.5 pl-9 pr-16 text-sm focus:outline-none focus:border-[#f97316] placeholder-[#737373] mono"
+                        autocomplete="off"
+                    >
+                    <span class="iconify absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#737373]" data-icon="lucide:search"></span>
+                    <kbd class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#737373] bg-[#0a0a0a] border border-[#222] rounded px-1.5 py-0.5 mono hidden sm:inline-block">Enter</kbd>
+                </div>
+            </div>
+            <a href="#/watchlist" class="relative flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#111] transition-colors" title="Watchlist">
+                <span class="iconify w-[18px] h-[18px] text-[#737373]" data-icon="lucide:bell"></span>
+                <span id="watchlist-badge" class="hidden absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#FF5252] rounded-full text-[10px] font-bold flex items-center justify-center"></span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main content - replaced by router -->
+    <main id="main-content" class="flex-1 max-w-6xl mx-auto px-4 py-6 w-full custom-scrollbar">
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-[#1a1a1a] bg-black/95 backdrop-blur">
+        <div class="max-w-6xl mx-auto px-4 h-10 flex items-center justify-between text-xs text-[#737373] mono">
+            <div class="flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#22c55e] live-dot"></span>
+                <span>Live Data</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <span>PSA Graded Pricing</span>
+                <span class="text-[#737373]/50">|</span>
+                <span>eBay Deals</span>
+                <span class="text-[#737373]/50">|</span>
+                <a
+                    href="https://pull.gacha.game/play/pack/?utm_source=gachatrade&utm_medium=social&utm_campaign=footer"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1.5 hover:text-white transition-colors"
+                >
+                    <img src="https://pull.gacha.game/logo.webp" alt="Gacha logo" class="w-4 h-4 rounded-sm object-cover" />
+                    <span>Powered by Gacha</span>
+                </a>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<!-- Watch Modal -->
+<div id="watch-modal" class="hidden fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-6 w-full max-w-sm animate-in">
+        <div id="watch-modal-content"></div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    // ─── State ───
+    const cardCache = {};
+    let currentRoute = '';
+
+    // ─── Click-to-toggle tooltips ───
+    document.addEventListener('click', function(e) {
+        const trigger = e.target.closest('.tip-trigger');
+        // Close all other open tooltips
+        document.querySelectorAll('.tip-trigger.tip-open').forEach(el => {
+            if (el !== trigger) el.classList.remove('tip-open');
+        });
+        // Toggle clicked tooltip
+        if (trigger) {
+            e.stopPropagation();
+            trigger.classList.toggle('tip-open');
+        }
+    });
+
+    // ─── Helpers ───
+    function esc(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    function $(sel) { return document.querySelector(sel); }
+
+    function ebaySearchUrl(query) {
+        return 'https://www.ebay.com/sch/i.html?_nkw=' + encodeURIComponent(query + ' pokemon card');
+    }
+
+    function formatPrice(price) {
+        if (price == null) return 'N/A';
+        return '$' + Number(price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function formatPriceFull(price) {
+        if (price == null) return 'N/A';
+        const n = Number(price);
+        // Show decimals only if they matter (e.g. $45.50 but not $1,826.00)
+        const hasCents = n % 1 !== 0;
+        return '$' + n.toLocaleString(undefined, { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 });
+    }
+
+    function signalColor(signal) {
+        const map = { strong_buy: '#22c55e', buy: '#f97316', fair: '#eab308', overpriced: '#FF5252', avoid: '#FF5252' };
+        return map[signal] || '#737373';
+    }
+
+    function signalLabel(signal) {
+        const map = { strong_buy: 'STRONG BUY', buy: 'BUY', fair: 'FAIR', overpriced: 'OVERPRICED', avoid: 'AVOID' };
+        return map[signal] || signal?.toUpperCase() || '';
+    }
+
+    function signalBg(signal) {
+        const map = { strong_buy: 'bg-green-500/15 text-green-400 border-green-500/30', buy: 'bg-orange-500/15 text-orange-400 border-orange-500/30', fair: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30', overpriced: 'bg-red-500/15 text-red-400 border-red-500/30', avoid: 'bg-red-500/15 text-red-400 border-red-500/30' };
+        return map[signal] || 'bg-gray-500/15 text-gray-400 border-gray-500/30';
+    }
+
+    // 2.2 Snipe Value — "Is this auction worth bidding on, and at what max bid?"
+    // Core insight: on eBay everyone uses max bid / sniping, so current bid count
+    // and time left don't predict who wins. What matters is:
+    //   1. How much room is there between current price and FMV?
+    //   2. Is the seller trustworthy?
+    //   3. What's my max bid to still get a deal?
+    function snipeValue(auction, fmv) {
+        const totalPrice = auction.totalPrice;
+        const shipping = auction.shippingCost || 0;
+        const bids = auction.bidCount || 0;
+        const fbPct = auction.sellerFeedbackPercent;
+        const fbScore = auction.sellerFeedbackScore;
+        const reasons = [];
+
+        // Max bid recommendation: bid up to X% below FMV and still "win" a deal
+        // Conservative target: 15% below FMV (after shipping)
+        const maxBidTotal = fmv * 0.85;
+        const maxBid = Math.max(0, maxBidTotal - shipping);
+        const headroom = fmv > 0 ? ((fmv - totalPrice) / fmv) * 100 : 0;
+
+        // === Signal 1: Value gap (how much room between current price and FMV) ===
+        let level;
+        if (totalPrice >= fmv) {
+            level = 'Pass';
+            reasons.push({ text: 'Already at/above FMV — no value even if you win', impact: 'negative' });
+        } else if (headroom < 10) {
+            level = 'Risky';
+            reasons.push({ text: 'Only ' + Math.round(headroom) + '% below FMV — thin margin after fees', impact: 'negative' });
+        } else if (headroom < 25) {
+            level = 'Fair';
+            reasons.push({ text: Math.round(headroom) + '% below FMV — decent room, but expect snipers', impact: 'neutral' });
+        } else {
+            level = 'Snipe';
+            reasons.push({ text: Math.round(headroom) + '% below FMV — good upside if final price holds', impact: 'positive' });
+        }
+
+        // === Signal 2: Bid activity as demand indicator ===
+        // High bids = many people watching = final price likely jumps near FMV
+        if (bids > 20) {
+            reasons.push({ text: bids + ' bids — heavy demand, final price will spike', impact: 'negative' });
+            if (level === 'Snipe') level = 'Fair';
+        } else if (bids > 10) {
+            reasons.push({ text: bids + ' bids — moderate demand, expect last-minute jump', impact: 'negative' });
+        } else if (bids <= 1) {
+            reasons.push({ text: bids === 0 ? 'No bids yet — less visibility' : '1 bid — low visibility so far', impact: 'positive' });
+        } else {
+            reasons.push({ text: bids + ' bids — some interest', impact: 'neutral' });
+        }
+
+        // === Signal 3: Seller risk ===
+        if (fbPct < 95 || fbScore < 10) {
+            reasons.push({ text: 'Risky seller (' + fbPct + '%) — discount may reflect risk', impact: 'negative' });
+            if (level === 'Snipe') level = 'Fair';
+        } else if (fbPct >= 99.5 && fbScore >= 1000) {
+            reasons.push({ text: 'Top seller — authentic card likely', impact: 'positive' });
+        }
+
+        return { level, reasons, maxBid, maxBidTotal };
+    }
+
+    function formatTimeRemaining(endDate) {
+        if (!endDate) return '—';
+        const diff = new Date(endDate).getTime() - Date.now();
+        if (diff <= 0) return 'Ended';
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        if (days > 0) return days + 'd ' + hours + 'h';
+        if (hours > 0) return hours + 'h ' + mins + 'm';
+        return mins + 'm';
+    }
+
+    function getEmail() { return localStorage.getItem('gacha_email') || ''; }
+    function setEmail(e) { localStorage.setItem('gacha_email', e); }
+
+    function updateWatchlistBadge() {
+        const email = getEmail();
+        const badge = $('#watchlist-badge');
+        if (!email || !badge) return;
+        fetch('/api/watchlist?email=' + encodeURIComponent(email))
+            .then(r => r.json())
+            .then(d => {
+                if (d.total > 0) {
+                    badge.textContent = d.total;
+                    badge.classList.remove('hidden');
+                    badge.classList.add('flex');
+                } else {
+                    badge.classList.add('hidden');
+                    badge.classList.remove('flex');
+                }
+            })
+            .catch(() => {});
+    }
+
+    // ─── Deals Tab Switching ───
+    window.switchDealsTab = function(tab) {
+        // Update tab buttons
+        document.querySelectorAll('.deals-tab').forEach(btn => {
+            if (btn.dataset.tab === tab) {
+                btn.classList.remove('deals-tab-inactive');
+                btn.classList.add('deals-tab-active');
+            } else {
+                btn.classList.remove('deals-tab-active');
+                btn.classList.add('deals-tab-inactive');
+            }
+        });
+        // Update panels
+        ['best', 'bin', 'auctions'].forEach(id => {
+            const panel = $(`#${id}-panel`);
+            if (panel) {
+                if (id === tab) {
+                    panel.classList.add('tab-panel-active');
+                } else {
+                    panel.classList.remove('tab-panel-active');
+                }
+            }
+        });
+    };
+
+    // ─── Card Registration (fire-and-forget) ───
+    window.registerCard = function(name, imageUrl, ebayItemId, query) {
+        fetch('/api/cards/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, imageUrl, ebayItemId, query }),
+        }).catch(() => {}); // fire-and-forget
+    };
+
+    // ─── eBay Fallback Search (inline) ───
+    window.searchEbayFallback = async function(query) {
+        const btn = $('#ebay-fallback-btn');
+        const resultsDiv = $('#ebay-fallback-results');
+        if (!btn || !resultsDiv) return;
+
+        // Show loading state
+        btn.disabled = true;
+        btn.innerHTML = `<span class="iconify w-4 h-4 animate-spin" data-icon="lucide:loader-2"></span> Searching...`;
+
+        try {
+            const res = await fetch('/api/search/ebay?q=' + encodeURIComponent(query));
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                // Server doesn't have this endpoint yet — open eBay externally
+                window.open(ebaySearchUrl(query), '_blank');
+                btn.innerHTML = `<span class="iconify w-4 h-4" data-icon="lucide:shopping-bag"></span> Search eBay`;
+                btn.disabled = false;
+                return;
+            }
+            const data = await res.json();
+
+            if (data.error) {
+                resultsDiv.innerHTML = `<div class="px-4 py-3 text-sm text-[#FF5252]">${esc(data.error)}</div>`;
+                btn.innerHTML = `<span class="iconify w-4 h-4" data-icon="lucide:shopping-bag"></span> Try again`;
+                btn.disabled = false;
+                return;
+            }
+
+            if (!data.listings || data.listings.length === 0) {
+                const fallbackUrl = ebaySearchUrl(query);
+                resultsDiv.innerHTML = `
+                    <div class="px-4 py-4 text-center">
+                        <p class="text-sm text-[#737373]">No eBay listings found</p>
+                        <a href="${fallbackUrl}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 mt-2 text-xs text-[#f97316] hover:underline mono">
+                            Search on eBay.com <span class="iconify w-3 h-3" data-icon="lucide:external-link"></span>
+                        </a>
+                    </div>`;
+                btn.remove();
+                return;
+            }
+
+            // Render eBay listings inline
+            let html = `
+                <div class="px-4 py-2 border-t border-[#1a1a1a]">
+                    <div class="flex items-center gap-2">
+                        <span class="iconify w-4 h-4 text-[#f97316]" data-icon="lucide:shopping-bag"></span>
+                        <span class="text-sm font-medium">${data.listings.length} eBay listing${data.listings.length !== 1 ? 's' : ''}</span>
+                    </div>
+                </div>
+                <div class="p-3 grid gap-2 sm:grid-cols-2">`;
+            for (const listing of data.listings) {
+                html += ebayListingCard(listing, query);
+            }
+            html += `</div>
+                <div class="px-4 py-3 text-center border-t border-[#1a1a1a] bg-[#080808]">
+                    <span class="text-xs text-[#737373]">Need more options?</span>
+                    <a href="${ebaySearchUrl(query)}" target="_blank" rel="noopener" class="ml-2 inline-flex items-center gap-1 text-xs text-[#f97316] hover:underline mono">
+                        Search eBay <span class="iconify w-3 h-3" data-icon="lucide:external-link"></span>
+                    </a>
+                </div>`;
+            resultsDiv.innerHTML = html;
+            btn.remove();
+        } catch (err) {
+            resultsDiv.innerHTML = `<div class="px-4 py-3 text-sm text-[#FF5252]">eBay search failed: ${esc(err.message)}</div>`;
+            btn.innerHTML = `<span class="iconify w-4 h-4" data-icon="lucide:shopping-bag"></span> Try again`;
+            btn.disabled = false;
+        }
+    };
+
+    // ─── Report Wrong Listing ───
+    window.reportListing = function(btn) {
+        const row = btn.closest('[data-item-id]');
+        if (!row) return;
+        // Replace button with inline reason input + submit
+        const container = btn.parentElement;
+        btn.remove();
+        const form = document.createElement('span');
+        form.className = 'inline-flex items-center gap-1.5';
+        form.innerHTML = `
+            <input type="text" placeholder="Reason (optional)" maxlength="200" class="report-reason bg-[#111] border border-[#222] rounded px-2 py-0.5 text-[11px] w-32 focus:outline-none focus:border-[#FF5252] placeholder-[#737373] mono">
+            <button class="report-submit text-[10px] font-semibold text-[#FF5252] hover:text-white border border-[#FF5252]/30 rounded px-1.5 py-0.5 transition-colors mono">Send</button>`;
+        container.appendChild(form);
+        const reasonInput = form.querySelector('.report-reason');
+        const submitBtn = form.querySelector('.report-submit');
+        reasonInput.focus();
+        async function submit() {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '...';
+            const fmvVal = row.dataset.fmv;
+            try {
+                const res = await fetch('/api/reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ebayItemId: row.dataset.itemId,
+                        ebayTitle: row.dataset.itemTitle,
+                        ebayUrl: row.dataset.itemUrl,
+                        cardId: row.dataset.cardId,
+                        cardName: row.dataset.cardName,
+                        grade: Number(row.dataset.grade),
+                        signal: row.dataset.signal,
+                        score: Number(row.dataset.score),
+                        fmv: fmvVal ? Number(fmvVal) : null,
+                        price: Number(row.dataset.price),
+                        reason: reasonInput.value.trim() || undefined,
+                        setName: row.dataset.setName || undefined,
+                        setCode: row.dataset.setCode || undefined,
+                        number: row.dataset.number || undefined,
+                        year: row.dataset.year ? Number(row.dataset.year) : undefined,
+                        variant: row.dataset.variant || undefined,
+                    }),
+                });
+                if (!res.ok) throw new Error('Failed');
+                form.innerHTML = '<span class="text-[11px] text-[#22c55e] mono">Reported</span>';
+            } catch {
+                form.innerHTML = '<span class="text-[11px] text-[#FF5252] mono">Failed</span>';
+            }
+        }
+        submitBtn.addEventListener('click', submit);
+        reasonInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        });
+    };
+
+    // ─── Skeleton Renderers ───
+    function skeletonTable(rows) {
+        let html = '<div class="space-y-0">';
+        for (let i = 0; i < rows; i++) {
+            html += `
+                <div class="flex items-center gap-4 px-4 py-3 border-b border-[#1a1a1a]">
+                    <div class="skeleton w-10 h-14 rounded-md flex-shrink-0"></div>
+                    <div class="flex-1 space-y-2">
+                        <div class="skeleton h-3.5 w-2/3 rounded"></div>
+                        <div class="skeleton h-3 w-1/3 rounded"></div>
+                    </div>
+                    <div class="skeleton h-4 w-16 rounded"></div>
+                </div>`;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    // ─── Table Row Item ───
+    function cardTableRow(card, extra) {
+        const img = card.imageUrl
+            ? `<img src="${esc(card.imageUrl)}" alt="${esc(card.name)}" class="w-10 h-14 object-contain rounded-md bg-[#111]" loading="lazy">`
+            : `<div class="w-10 h-14 bg-[#111] rounded-md flex items-center justify-center"><span class="iconify w-5 h-5 text-[#333]" data-icon="lucide:image"></span></div>`;
+        const grade = extra.grade ? `<span class="text-[11px] font-semibold text-[#f97316] mono">PSA ${extra.grade}</span>` : '';
+        const price = extra.fmv != null ? `<span class="text-sm font-bold mono">${formatPrice(extra.fmv)}</span>` : '<span class="text-sm text-[#737373] mono">--</span>';
+        const gradeParam = extra.grade || 10;
+        return `
+            <a href="#/card/${encodeURIComponent(card.id)}?grade=${gradeParam}&name=${encodeURIComponent(card.name)}&setName=${encodeURIComponent(card.setName)}&number=${encodeURIComponent(card.number)}&year=${card.year || ''}&rarity=${encodeURIComponent(card.rarity || '')}&variant=${encodeURIComponent(card.variant || '')}&imageUrl=${encodeURIComponent(card.imageUrl || '')}"
+               class="flex items-center gap-4 px-4 py-3 border-b border-[#1a1a1a] table-row-hover block">
+                ${img}
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-sm font-medium truncate">${esc(card.name)}</h3>
+                    <p class="text-[11px] text-[#737373] truncate">${esc(card.setName)}${card.number ? ' #' + esc(card.number) : ''}</p>
+                </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    ${grade}
+                    ${price}
+                    <span class="iconify w-4 h-4 text-[#333]" data-icon="lucide:chevron-right"></span>
+                </div>
+            </a>`;
+    }
+
+    // ─── eBay Listing Card ───
+    function ebayListingCard(listing, query) {
+        const img = listing.imageUrl
+            ? `<img src="${esc(listing.imageUrl)}" alt="${esc(listing.title)}" class="w-16 h-20 object-contain rounded-md bg-[#111] flex-shrink-0" loading="lazy">`
+            : `<div class="w-16 h-20 bg-[#111] rounded-md flex items-center justify-center flex-shrink-0"><span class="iconify w-6 h-6 text-[#333]" data-icon="lucide:image"></span></div>`;
+        const title = listing.title.length > 60 ? listing.title.slice(0, 57) + '...' : listing.title;
+        const shipping = listing.shippingCost > 0 ? `+${formatPriceFull(listing.shippingCost)} ship` : 'Free shipping';
+        const typeBadge = listing.listingType === 'BuyItNow' ? 'BIN' : listing.listingType === 'BestOffer' ? 'OBO' : 'Auction';
+        const typeBadgeClass = listing.listingType === 'BuyItNow' ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' : listing.listingType === 'BestOffer' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' : 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30';
+
+        // Clean title for card detail navigation: strip grader labels, common eBay noise
+        const cleanName = listing.title
+            .replace(/\b(PSA|BGS|CGC|SGC)\s*\d+(\.\d+)?\b/gi, '')
+            .replace(/\bFREE\s+SHIPPING\b/gi, '')
+            .replace(/\bGEM\s+MINT\b/gi, '')
+            .replace(/\bMINT\b/gi, '')
+            .replace(/\bPRISTINE\b/gi, '')
+            .replace(/\b(INVEST|RARE|HOT|LOOK|WOW|L@@K)\b/gi, '')
+            .replace(/[#!]+/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+        const detailHref = `#/card/${encodeURIComponent(listing.itemId)}?grade=10&name=${encodeURIComponent(cleanName)}&setName=&number=&imageUrl=${encodeURIComponent(listing.imageUrl || '')}`;
+
+        const registerOnClick = query
+            ? `onclick="registerCard('${esc(cleanName).replace(/'/g, "\\'")}', '${esc(listing.imageUrl || '').replace(/'/g, "\\'")}', '${esc(listing.itemId).replace(/'/g, "\\'")}', '${esc(query).replace(/'/g, "\\'")}')"`
+            : '';
+
+        return `
+            <a href="${detailHref}" ${registerOnClick} class="flex gap-3 p-3 border border-[#1a1a1a] rounded-lg table-row-hover block">
+                ${img}
+                <div class="flex-1 min-w-0">
+                    <h4 class="text-sm font-medium truncate">${esc(title)}</h4>
+                    <div class="flex items-center gap-2 mt-1.5">
+                        <span class="text-base font-bold mono">${formatPriceFull(listing.totalPrice)}</span>
+                        <span class="text-[11px] text-[#737373] mono">${esc(shipping)}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold border mono ${typeBadgeClass}">${typeBadge}</span>
+                        <span class="text-[11px] text-[#737373] mono">${esc(listing.sellerUsername)} (${listing.sellerFeedbackPercent}%)</span>
+                    </div>
+                </div>
+            </a>`;
+    }
+
+    // ─── Views ───
+
+    async function renderHome() {
+        const main = $('#main-content');
+        main.innerHTML = `
+            <div class="mb-4">
+                <h2 class="text-xs font-semibold text-[#737373] uppercase tracking-wider">Recent Searches</h2>
+            </div>
+            <div id="popular-grid" class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden">${skeletonTable(10)}</div>`;
+
+        try {
+            const res = await fetch('/api/popular');
+            const data = await res.json();
+            if (!data.cards || data.cards.length === 0) {
+                $('#popular-grid').innerHTML = '<div class="px-4 py-8 text-center text-[#737373] text-sm">No recent searches yet. Search for a card to get started.</div>';
+                return;
+            }
+            // Table header
+            let html = '';
+            html += `<div class="hidden sm:flex items-center gap-4 px-4 py-2 border-b border-[#1a1a1a] text-[10px] text-[#737373] uppercase tracking-wider mono">
+                <div class="w-10 flex-shrink-0"></div>
+                <div class="flex-1">Card</div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    <span class="w-14 text-right">Grade</span>
+                    <span class="w-16 text-right">FMV</span>
+                    <span class="w-4"></span>
+                </div>
+            </div>`;
+            for (const item of data.cards) {
+                cardCache[item.card.id] = item.card;
+                html += cardTableRow(item.card, { grade: item.defaultGrade, fmv: item.fmv });
+            }
+            $('#popular-grid').innerHTML = html;
+        } catch (err) {
+            $('#popular-grid').innerHTML = `<div class="px-4 py-8 text-center text-[#FF5252] text-sm">Failed to load popular cards: ${esc(err.message)}</div>`;
+        }
+    }
+
+    async function renderSearch(query) {
+        const main = $('#main-content');
+        main.innerHTML = `
+            <div class="mb-4">
+                <h2 class="text-xs font-semibold text-[#737373] uppercase tracking-wider">Search: "${esc(query)}"</h2>
+            </div>
+            <div id="search-grid" class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden">${skeletonTable(6)}</div>`;
+
+        try {
+            const res = await fetch('/api/search?q=' + encodeURIComponent(query));
+            const data = await res.json();
+            if (!data.results || data.results.length === 0) {
+                // eBay fallback: show listings when card resolution fails
+                if (data.ebayListings && data.ebayListings.length > 0) {
+                    const listingsEbayUrl = ebaySearchUrl(query);
+                    let html = `
+                        <div class="px-4 py-3 border-b border-[#1a1a1a]">
+                            <div class="flex items-center gap-2">
+                                <span class="iconify w-4 h-4 text-[#f97316]" data-icon="lucide:shopping-bag"></span>
+                                <span class="text-sm font-medium">We found these listings on eBay</span>
+                            </div>
+                            <p class="text-[11px] text-[#737373] mt-1">We couldn't match a specific card, but here are eBay listings for your search.</p>
+                        </div>
+                        <div class="p-3 grid gap-2 sm:grid-cols-2">`;
+                    for (const listing of data.ebayListings) {
+                        html += ebayListingCard(listing, query);
+                    }
+                    html += `</div>
+                        <div class="px-4 py-3 text-center border-t border-[#1a1a1a] bg-[#080808]">
+                            <span class="text-xs text-[#737373]">Need more options?</span>
+                            <a href="${listingsEbayUrl}" target="_blank" rel="noopener" class="ml-2 inline-flex items-center gap-1 text-xs text-[#f97316] hover:underline mono">
+                                Search eBay <span class="iconify w-3 h-3" data-icon="lucide:external-link"></span>
+                            </a>
+                        </div>`;
+                    $('#search-grid').innerHTML = html;
+                    return;
+                }
+                const fallbackEbayUrl = ebaySearchUrl(query);
+                $('#search-grid').innerHTML = `
+                    <div class="text-center py-12 px-4">
+                        <span class="iconify w-10 h-10 text-[#333] mx-auto mb-3" data-icon="lucide:search-x"></span>
+                        <p class="text-[#737373] text-sm">No cards found for "${esc(query)}"</p>
+                        <p class="text-[#737373]/60 text-xs mt-1">Try a different search term</p>
+                        <a href="${fallbackEbayUrl}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 mt-4 px-4 py-2 bg-[#111] border border-[#222] hover:border-[#f97316] rounded-md text-sm text-[#f97316] transition-colors mono">
+                            Search on eBay <span class="iconify w-3.5 h-3.5" data-icon="lucide:external-link"></span>
+                        </a>
+                    </div>`;
+                return;
+            }
+            let html = `<div class="px-4 py-2 border-b border-[#1a1a1a] text-[11px] text-[#737373] mono">${data.results.length} result${data.results.length !== 1 ? 's' : ''}</div>`;
+            for (const candidate of data.results) {
+                const card = candidate.card;
+                cardCache[card.id] = card;
+                html += cardTableRow(card, { grade: null, fmv: null });
+            }
+            // "Not what you're looking for?" eBay fallback section
+            html += `
+                <div id="ebay-fallback" class="border-t border-[#1a1a1a]">
+                    <div class="px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                            <p class="text-sm text-[#737373]">Not what you're looking for?</p>
+                            <p class="text-[11px] text-[#737373]/60 mt-0.5">Search eBay directly for this listing</p>
+                        </div>
+                        <button id="ebay-fallback-btn" onclick="searchEbayFallback('${esc(query).replace(/'/g, "\\'")}')"
+                            class="inline-flex items-center gap-2 px-4 py-2 bg-[#111] border border-[#222] hover:border-[#f97316] rounded-md text-sm text-[#f97316] transition-colors mono flex-shrink-0 cursor-pointer">
+                            <span class="iconify w-4 h-4" data-icon="lucide:shopping-bag"></span>
+                            Search eBay
+                        </button>
+                    </div>
+                    <div id="ebay-fallback-results"></div>
+                </div>`;
+            $('#search-grid').innerHTML = html;
+        } catch (err) {
+            $('#search-grid').innerHTML = `<div class="px-4 py-8 text-center text-[#FF5252] text-sm">Search failed: ${esc(err.message)}</div>`;
+        }
+    }
+
+    async function renderCardDetail(id, params) {
+        const grade = parseInt(params.get('grade') || '10', 10);
+        const main = $('#main-content');
+
+        // Reconstruct card from cache or params
+        const card = cardCache[id] || {
+            id: id,
+            name: params.get('name') || 'Unknown Card',
+            setName: params.get('setName') || '',
+            number: params.get('number') || '',
+            year: params.get('year') || '',
+            rarity: params.get('rarity') || '',
+            variant: params.get('variant') || '',
+            imageUrl: params.get('imageUrl') || '',
+        };
+
+        const qp = new URLSearchParams({
+            name: card.name,
+            setName: card.setName || '',
+            number: card.number || '',
+            year: String(card.year || ''),
+            rarity: card.rarity || '',
+            variant: card.variant || '',
+        });
+
+        // Grade link builder (reused by FMV table cells)
+        const gradeHref = (g) => `#/card/${encodeURIComponent(id)}?grade=${g}&${qp.toString()}&imageUrl=${encodeURIComponent(card.imageUrl || '')}`;
+
+        const img = card.imageUrl
+            ? `<img src="${esc(card.imageUrl)}" alt="${esc(card.name)}" class="w-full max-w-[200px] rounded-lg">`
+            : `<div class="w-full max-w-[200px] h-72 bg-[#111] rounded-lg flex items-center justify-center"><span class="iconify w-12 h-12 text-[#333]" data-icon="lucide:image"></span></div>`;
+
+        main.innerHTML = `
+            <div class="animate-in">
+                <button onclick="history.back()" class="text-xs text-[#737373] hover:text-white mb-4 flex items-center gap-1 transition-colors">
+                    <span class="iconify w-4 h-4" data-icon="lucide:arrow-left"></span>
+                    Back
+                </button>
+
+                <div class="flex flex-col md:flex-row gap-6">
+                    <!-- Left: Card image + identity -->
+                    <div class="flex-shrink-0 flex flex-col items-center md:items-start gap-3">
+                        ${img}
+                        <button onclick="openWatchModal('${esc(id)}', ${grade}, '${esc(card.name)}', '${esc(card.setName || '')}', '${esc(card.imageUrl || '')}')" class="w-full max-w-[200px] bg-[#f97316] hover:bg-[#fb923c] text-white rounded-md px-4 py-2 text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                            <span class="iconify w-4 h-4" data-icon="lucide:bell"></span>
+                            Watch this card
+                        </button>
+                    </div>
+
+                    <!-- Right: Info + pricing + deals -->
+                    <div class="flex-1 min-w-0">
+                        <h1 class="text-xl font-bold">${esc(card.name)}</h1>
+                        <p class="text-sm text-[#737373] mt-1">${esc(card.setName || '')}${card.number ? ' #' + esc(card.number) : ''}${card.variant ? ' &middot; ' + esc(card.variant) : ''}${card.year ? ' &middot; ' + card.year : ''}</p>
+
+                        <!-- Pricing section -->
+                        <div class="mt-6">
+                            <h3 class="text-[10px] font-semibold text-[#737373] uppercase tracking-wider mb-3 mono">Pricing Analysis</h3>
+                            <div id="pricing-section">
+                                <div class="space-y-2">
+                                    <div class="skeleton h-10 w-full rounded-md"></div>
+                                    <div class="skeleton h-24 w-full rounded-md"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Listings tabs -->
+                        <div class="mt-6">
+                            <div class="flex gap-0 border-b border-[#1a1a1a] mb-4">
+                                <button class="deals-tab deals-tab-active px-4 py-2 text-xs font-semibold uppercase tracking-wider mono" data-tab="best" onclick="switchDealsTab('best')">Best Deals</button>
+                                <button class="deals-tab deals-tab-inactive px-4 py-2 text-xs font-semibold uppercase tracking-wider mono" data-tab="bin" onclick="switchDealsTab('bin')">Buy It Now</button>
+                                <button class="deals-tab deals-tab-inactive px-4 py-2 text-xs font-semibold uppercase tracking-wider mono" data-tab="auctions" onclick="switchDealsTab('auctions')">Auctions</button>
+                            </div>
+
+                            <!-- Best Deals panel (mixed BIN + Auction) -->
+                            <div id="best-panel" class="tab-panel tab-panel-active">
+                                <div id="best-section">
+                                    <div class="space-y-2">
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Buy It Now panel -->
+                            <div id="bin-panel" class="tab-panel">
+                                <div id="deals-section">
+                                    <div class="space-y-2">
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Auctions panel -->
+                            <div id="auctions-panel" class="tab-panel">
+                                <div id="auctions-section">
+                                    <div class="space-y-2">
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                        <div class="skeleton h-16 w-full rounded-md"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+        // Fetch pricing + deals in parallel
+        const pricingUrl = `/api/cards/${encodeURIComponent(id)}/pricing?grade=${grade}&${qp.toString()}`;
+        const dealsUrl = `/api/cards/${encodeURIComponent(id)}/deals?grade=${grade}&${qp.toString()}`;
+
+        const [pricingResult, dealsResult] = await Promise.allSettled([
+            fetch(pricingUrl).then(r => r.json()),
+            fetch(dealsUrl).then(r => r.json()),
+        ]);
+
+        // Render pricing
+        if (pricingResult.status === 'fulfilled' && !pricingResult.value.error) {
+            const p = pricingResult.value;
+            const sources = p.sources || {};
+            let fmvDisplay = p.fmv != null ? formatPrice(p.fmv) : 'N/A';
+
+            // Hero: FMV + multi-source rows
+            let sourcesHtml = '';
+            if (sources.priceCharting || sources.pptEbay || sources.tcgPlayer) {
+                sourcesHtml = '<div class="border-t border-[#1a1a1a] mt-3 pt-3 space-y-1.5">';
+                if (sources.priceCharting) {
+                    sourcesHtml += `
+                        <div class="flex items-center justify-between text-sm mono">
+                            <span class="text-[#737373]">${esc(sources.priceCharting.label)}</span>
+                            <span class="font-semibold">${sources.priceCharting.fmv != null ? formatPrice(sources.priceCharting.fmv) : '—'}</span>
+                        </div>`;
+                }
+                if (sources.pptEbay) {
+                    const ebayGrade = sources.pptEbay.gradeData[grade];
+                    if (ebayGrade) {
+                        const confColor = ebayGrade.confidence === 'high' ? 'text-green-400' : ebayGrade.confidence === 'medium' ? 'text-yellow-400' : 'text-[#737373]';
+                        sourcesHtml += `
+                            <div class="flex items-center justify-between text-sm mono">
+                                <span class="text-[#737373]">${esc(sources.pptEbay.label)}</span>
+                                <span class="flex items-center gap-2">
+                                    <span class="font-semibold">${formatPrice(ebayGrade.fmv)}</span>
+                                    <span class="text-[10px] ${confColor}">${ebayGrade.confidence} (${ebayGrade.salesCount} sales)</span>
+                                </span>
+                            </div>`;
+                    } else {
+                        sourcesHtml += `
+                            <div class="flex items-center justify-between text-sm mono">
+                                <span class="text-[#737373]">${esc(sources.pptEbay.label)}</span>
+                                <span class="text-[#737373]">—</span>
+                            </div>`;
+                    }
+                }
+                if (sources.tcgPlayer) {
+                    sourcesHtml += `
+                        <div class="flex items-center justify-between text-sm mono">
+                            <span class="text-[#737373]">${esc(sources.tcgPlayer.label)} (ungraded)</span>
+                            <span class="font-semibold">${sources.tcgPlayer.market != null ? formatPriceFull(sources.tcgPlayer.market) : '—'}</span>
+                        </div>`;
+                }
+                sourcesHtml += '</div>';
+            }
+
+            // Grade grid with optional PPT eBay second line
+            let gradesHtml = '';
+            if (p.allGrades) {
+                gradesHtml = '<div class="grid grid-cols-5 gap-1.5 mt-3">';
+                for (let g = 6; g <= 10; g++) {
+                    const val = p.allGrades[g];
+                    const isActive = g === grade;
+                    // PPT eBay price for this grade
+                    const ebayGrade = sources.pptEbay?.gradeData?.[g];
+                    const ebayLine = ebayGrade
+                        ? `<div class="text-[10px] text-[#737373]/60 mt-0.5 mono">${formatPrice(ebayGrade.fmv)}</div>`
+                        : '';
+                    gradesHtml += `
+                        <a href="${gradeHref(g)}" class="text-center p-2 rounded-md cursor-pointer transition-all no-underline ${isActive ? 'bg-[#f97316]/10 border border-[#f97316]/30' : 'bg-[#111] hover:border-[#f97316]/50 border border-transparent'}">
+                            <div class="text-[10px] text-[#737373] mono">PSA ${g}</div>
+                            <div class="text-xs font-semibold mt-0.5 mono ${isActive ? 'text-[#f97316]' : 'text-white'}">${val != null ? formatPrice(val) : '—'}</div>
+                            ${ebayLine}
+                        </a>`;
+                }
+                gradesHtml += '</div>';
+            }
+            $('#pricing-section').innerHTML = `
+                <div class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-4">
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-bold mono">${fmvDisplay}</span>
+                        <span class="text-xs text-[#737373] mono">FMV &middot; PSA ${grade}</span>
+                    </div>
+                    ${sourcesHtml}
+                    ${gradesHtml}
+                </div>`;
+        } else {
+            const errMsg = pricingResult.status === 'rejected'
+                ? pricingResult.reason?.message || 'Failed to load'
+                : pricingResult.value?.error || 'Failed to load pricing';
+            $('#pricing-section').innerHTML = `<p class="text-sm text-[#737373]">${esc(errMsg)}</p>`;
+        }
+
+        // Render deals
+        if (dealsResult.status === 'fulfilled' && !dealsResult.value.error) {
+            const d = dealsResult.value;
+            if (!d.deals || d.deals.length === 0) {
+                $('#deals-section').innerHTML = `<p class="text-sm text-[#737373]">No eBay listings found for this card at PSA ${grade}.</p>`;
+            } else {
+                let html = `<p class="text-[11px] text-[#737373] mb-3 mono">${d.totalListingsFound} listing${d.totalListingsFound !== 1 ? 's' : ''} found &middot; Top ${d.deals.length} shown</p>`;
+                html += '<div class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden divide-y divide-[#1a1a1a]">';
+                for (const deal of d.deals) {
+                    const l = deal.listing;
+                    const savings = deal.savingsPercent > 0 ? `-${deal.savingsPercent.toFixed(1)}%` : `+${Math.abs(deal.savingsPercent).toFixed(1)}%`;
+                    const savingsColor = deal.savingsPercent > 0 ? 'text-green-400' : 'text-red-400';
+                    html += `
+                        <div class="px-4 py-3 table-row-hover"
+                             data-item-id="${esc(l.itemId)}"
+                             data-item-title="${esc(l.title)}"
+                             data-item-url="${esc(l.itemUrl || '')}"
+                             data-card-id="${esc(d.card.id)}"
+                             data-card-name="${esc(d.card.name)}"
+                             data-set-name="${esc(d.card.setName || '')}"
+                             data-set-code="${esc(d.card.setCode || '')}"
+                             data-number="${esc(d.card.number || '')}"
+                             data-year="${d.card.year || ''}"
+                             data-variant="${esc(d.card.variant || '')}"
+                             data-grade="${grade}"
+                             data-signal="${esc(deal.signal)}"
+                             data-score="${deal.score}"
+                             data-fmv="${deal.fmv ? deal.fmv.fmv : ''}"
+                             data-price="${l.totalPrice}">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="text-sm font-medium truncate">${esc(l.title)}</h4>
+                                    <div class="flex items-center gap-3 mt-1.5">
+                                        <span class="text-base font-bold mono">${formatPrice(l.totalPrice)}</span>
+                                        ${deal.fmv ? `<span class="text-[11px] text-[#737373] mono">FMV ${formatPrice(deal.fmv.fmv)}</span>` : ''}
+                                        <span class="text-xs font-semibold mono ${savingsColor}">${savings}</span>
+                                    </div>
+                                    <div class="flex items-center gap-3 mt-1 text-[11px] text-[#737373] mono">
+                                        <span>${esc(l.listingType)}</span>
+                                        <span>${esc(l.sellerUsername)} (${l.sellerFeedbackPercent}%)</span>
+                                        ${l.shippingCost > 0 ? `<span>+${formatPrice(l.shippingCost)} ship</span>` : '<span>Free ship</span>'}
+                                    </div>
+                                    <div class="flex items-center gap-2 mt-1.5">
+                                        ${l.itemUrl ? `<a href="${esc(l.itemUrl)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs text-[#f97316] hover:underline mono">View on eBay <span class="iconify w-3 h-3" data-icon="lucide:external-link"></span></a>` : ''}
+                                        <button onclick="reportListing(this)" class="report-btn inline-flex items-center gap-1 text-xs text-[#737373] hover:text-[#FF5252] transition-colors mono" title="Report wrong listing">
+                                            <span class="iconify w-3 h-3" data-icon="lucide:flag"></span>
+                                            <span>Report</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0 flex flex-col items-end gap-2">
+                                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border mono ${signalBg(deal.signal)}">${signalLabel(deal.signal)}</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-14 h-1.5 bg-[#111] rounded-full overflow-hidden">
+                                            <div class="score-bar h-full rounded-full" style="width:${deal.score}%;background:${signalColor(deal.signal)}"></div>
+                                        </div>
+                                        <span class="text-[10px] font-semibold text-[#737373] mono">${deal.score}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                html += '</div>';
+                $('#deals-section').innerHTML = html;
+            }
+        } else {
+            const errMsg = dealsResult.status === 'rejected'
+                ? dealsResult.reason?.message || 'Failed to load'
+                : dealsResult.value?.error || 'No deals available';
+            $('#deals-section').innerHTML = `<p class="text-sm text-[#737373]">${esc(errMsg)}</p>`;
+        }
+
+        // Auto-grade switch: if no deals at current grade, redirect to highest grade with pricing
+        const autoSwitched = params.get('auto') === '1';
+        if (!autoSwitched
+            && dealsResult.status === 'fulfilled' && !dealsResult.value.error
+            && (!dealsResult.value.deals || dealsResult.value.deals.length === 0)
+            && pricingResult.status === 'fulfilled' && !pricingResult.value.error
+            && pricingResult.value.allGrades) {
+            const ag = pricingResult.value.allGrades;
+            // Find highest grade below current that has a price
+            let bestGrade = null;
+            for (let g = grade - 1; g >= 6; g--) {
+                if (ag[g] != null) { bestGrade = g; break; }
+            }
+            // Also check grades above current (unlikely but handles edge cases)
+            if (bestGrade === null) {
+                for (let g = grade + 1; g <= 10; g++) {
+                    if (ag[g] != null) { bestGrade = g; break; }
+                }
+            }
+            if (bestGrade !== null && bestGrade !== grade) {
+                location.hash = `#/card/${encodeURIComponent(id)}?grade=${bestGrade}&${qp.toString()}&imageUrl=${encodeURIComponent(card.imageUrl || '')}&auto=1`;
+                return;
+            }
+        }
+
+        // Render auctions
+        if (dealsResult.status === 'fulfilled' && !dealsResult.value.error) {
+            const d = dealsResult.value;
+            if (!d.auctions || d.auctions.length === 0) {
+                $('#auctions-section').innerHTML = `<p class="text-sm text-[#737373]">No active auctions found.</p>`;
+            } else {
+                let ahtml = '<div class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden">';
+                ahtml += `<div class="hidden sm:grid grid-cols-[1fr_100px_60px_130px_90px] gap-2 px-4 py-2 border-b border-[#1a1a1a] text-[10px] text-[#737373] uppercase tracking-wider mono">
+                    <span>Title</span>
+                    <span class="text-right">Bid</span>
+                    <span class="text-right">Bids</span>
+                    <span>Seller</span>
+                    <span class="text-right">Ends</span>
+                </div>`;
+                for (const raw of d.auctions) {
+                    // Phase 2: auctions may be ScoredDeal objects or plain EbayListing
+                    const a = raw.listing || raw;
+                    const timeLeft = formatTimeRemaining(a.endDate);
+                    const urgentClass = timeLeft.match(/^\d+m$/) || timeLeft.match(/^[0-2]h/) ? 'text-[#FF5252] font-semibold' : 'text-[#f97316]';
+
+                    // 1.1 FMV Comparison Badge
+                    let fmvBadge = '';
+                    if (d.fmv != null && d.fmv > 0) {
+                        const pctDiff = ((d.fmv - a.totalPrice) / d.fmv) * 100;
+                        if (pctDiff >= 20) {
+                            fmvBadge = `<div class="text-[10px] mono text-green-400">\u25BC ${Math.round(pctDiff)}% below FMV</div>`;
+                        } else if (pctDiff >= 1) {
+                            fmvBadge = `<div class="text-[10px] mono text-green-400/60">\u25BC ${Math.round(pctDiff)}% below</div>`;
+                        } else if (pctDiff >= -15) {
+                            fmvBadge = `<div class="text-[10px] mono text-[#737373]">\u25B2 ${Math.round(Math.abs(pctDiff))}% above</div>`;
+                        } else {
+                            fmvBadge = `<div class="text-[10px] mono text-red-400">\u25B2 ${Math.round(Math.abs(pctDiff))}% above</div>`;
+                        }
+                    }
+
+                    // 1.2 End-Time Context
+                    let endTimeContext = '';
+                    if (a.endDate) {
+                        const endDate = new Date(a.endDate);
+                        const dayTime = endDate.toLocaleDateString('en-US', { weekday: 'short' })
+                            + ' ' + endDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                        endTimeContext = `<div class="text-[10px] mono text-[#737373]">${dayTime}</div>`;
+                    }
+
+                    // 1.3 Seller Trust Tier
+                    let sellerClass = 'text-[#737373]';
+                    let sellerPrefix = '';
+                    const fbPct = a.sellerFeedbackPercent;
+                    const fbScore = a.sellerFeedbackScore;
+                    if (fbPct < 95 || fbScore < 10) {
+                        sellerClass = 'text-red-400';
+                        sellerPrefix = '\u26A0 ';
+                    } else if (fbPct < 97) {
+                        sellerClass = 'text-yellow-500';
+                        sellerPrefix = '\u26A0 ';
+                    } else if (fbPct >= 99.5 && fbScore >= 1000) {
+                        sellerClass = 'text-green-400';
+                    }
+
+                    // 2.2 Snipe Value badge with reasoning tooltip
+                    let snipeBadge = '';
+                    if (d.fmv != null && d.fmv > 0) {
+                        const sv = snipeValue(a, d.fmv);
+                        const svStyles = {
+                            Snipe: 'bg-green-500/15 text-green-400 border border-green-500/30',
+                            Fair:  'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30',
+                            Risky: 'bg-orange-500/15 text-orange-400 border border-orange-500/30',
+                            Pass:  'bg-red-500/15 text-red-400 border border-red-500/30',
+                        };
+                        const svLabel = {
+                            Snipe: 'Worth sniping',
+                            Fair:  'Possible deal — set a firm max',
+                            Risky: 'Thin margin — proceed with caution',
+                            Pass:  'Already above FMV — skip',
+                        };
+                        const impactIcon = { positive: '+', negative: '\u2212', neutral: '\u2022' };
+                        const impactColor = { positive: 'text-green-400', negative: 'text-red-400', neutral: 'text-[#737373]' };
+                        const reasonLines = sv.reasons.map(r =>
+                            `<div class="flex gap-1.5 items-start"><span class="${impactColor[r.impact]} font-bold w-3 shrink-0">${impactIcon[r.impact]}</span><span>${r.text}</span></div>`
+                        ).join('');
+                        const maxBidLine = sv.level !== 'Pass'
+                            ? `<div class="mt-2 pt-2 border-t border-[#2a2a2a]"><div class="text-[10px] text-[#999]">Suggested max bid</div><div class="text-[13px] font-bold text-white mono">${formatPriceFull(sv.maxBid)}</div><div class="text-[9px] text-[#555]">${formatPriceFull(sv.maxBidTotal)} total incl. shipping — 15% below FMV</div></div>`
+                            : '';
+                        snipeBadge = `
+                            <span class="tip-trigger">
+                                <span class="text-[10px] px-1.5 py-0.5 rounded ${svStyles[sv.level]}">${sv.level}</span>
+                                <div class="tip-body w-60 bg-[#111] border border-[#2a2a2a] rounded-lg p-3 shadow-xl text-left">
+                                    <div class="text-[11px] font-semibold mb-2 ${svStyles[sv.level].split(' ').find(c => c.startsWith('text-'))}">${svLabel[sv.level]}</div>
+                                    <div class="text-[10px] text-[#999] space-y-1">${reasonLines}</div>
+                                    ${maxBidLine}
+                                </div>
+                            </span>`;
+                    }
+
+                    // 2.3 Bid Breakdown Tooltip
+                    const bidTooltip = `Bid: ${formatPriceFull(a.price)}\nShipping: ${formatPriceFull(a.shippingCost)}\nTotal: ${formatPriceFull(a.totalPrice)}`;
+
+                    // Title with inline view link
+                    const viewLink = a.itemUrl
+                        ? ` <a href="${esc(a.itemUrl)}" target="_blank" rel="noopener" class="inline text-[#f97316] hover:underline"><span class="iconify w-3 h-3 inline" data-icon="lucide:external-link"></span></a>`
+                        : '';
+
+                    ahtml += `
+                        <div class="px-4 py-3 border-b border-[#1a1a1a] table-row-hover${a.itemUrl ? ' cursor-pointer' : ''}" ${a.itemUrl ? `onclick="window.open('${esc(a.itemUrl)}', '_blank')"` : ''}>
+                            <div class="sm:grid sm:grid-cols-[1fr_100px_60px_130px_90px] sm:gap-2 sm:items-start">
+                                <h4 class="text-sm font-medium truncate">${esc(a.title)}${viewLink}</h4>
+                                <div class="text-right">
+                                    <span class="text-sm font-bold mono" title="${esc(bidTooltip)}">${formatPriceFull(a.totalPrice)}</span>
+                                    ${fmvBadge}
+                                </div>
+                                <span class="text-sm mono text-right text-[#737373]">${a.bidCount != null ? a.bidCount : '\u2014'}</span>
+                                <span class="text-[11px] ${sellerClass} mono">${sellerPrefix}${esc(a.sellerUsername)} (${fbPct}%)</span>
+                                <div class="text-right">
+                                    <span class="text-xs mono ${urgentClass}">${timeLeft}</span>
+                                    ${endTimeContext}
+                                    ${snipeBadge}
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                ahtml += '</div>';
+                $('#auctions-section').innerHTML = ahtml;
+            }
+        } else {
+            $('#auctions-section').innerHTML = `<p class="text-sm text-[#737373]">Could not load auctions.</p>`;
+        }
+
+        // Render Best Deals tab (combined BIN + Auction, good deals only)
+        if (dealsResult.status === 'fulfilled' && !dealsResult.value.error) {
+            const d = dealsResult.value;
+            const allDeals = [...(d.deals || []), ...(d.auctions || [])];
+            // Filter to good deals only: strong_buy, buy, fair
+            const goodDeals = allDeals
+                .filter(deal => {
+                    const signal = deal.signal;
+                    return signal === 'strong_buy' || signal === 'buy' || signal === 'fair';
+                })
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10);
+
+            if (goodDeals.length === 0) {
+                $('#best-section').innerHTML = `<p class="text-sm text-[#737373]">No good deals found at PSA ${grade}. Check the Buy It Now and Auctions tabs for all listings.</p>`;
+            } else {
+                let bhtml = `<p class="text-[11px] text-[#737373] mb-3 mono">${goodDeals.length} deal${goodDeals.length !== 1 ? 's' : ''} worth considering</p>`;
+                bhtml += '<div class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden divide-y divide-[#1a1a1a]">';
+                for (const deal of goodDeals) {
+                    const l = deal.listing || deal;
+                    const isAuction = l.listingType === 'Auction';
+                    const savings = deal.savingsPercent > 0 ? `-${deal.savingsPercent.toFixed(1)}%` : `+${Math.abs(deal.savingsPercent).toFixed(1)}%`;
+                    const savingsColor = deal.savingsPercent > 0 ? 'text-green-400' : 'text-red-400';
+                    const typeBadge = isAuction
+                        ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 mono">Auction</span>'
+                        : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30 mono">BIN</span>';
+                    const timeLeft = isAuction && l.endDate ? formatTimeRemaining(l.endDate) : '';
+                    const bidInfo = isAuction && l.bidCount != null ? `${l.bidCount} bid${l.bidCount !== 1 ? 's' : ''}` : '';
+                    bhtml += `
+                        <div class="px-4 py-3 table-row-hover"
+                             data-item-id="${esc(l.itemId)}"
+                             data-item-title="${esc(l.title)}"
+                             data-item-url="${esc(l.itemUrl || '')}"
+                             data-card-id="${esc(d.card.id)}"
+                             data-card-name="${esc(d.card.name)}"
+                             data-set-name="${esc(d.card.setName || '')}"
+                             data-set-code="${esc(d.card.setCode || '')}"
+                             data-number="${esc(d.card.number || '')}"
+                             data-year="${d.card.year || ''}"
+                             data-variant="${esc(d.card.variant || '')}"
+                             data-grade="${grade}"
+                             data-signal="${esc(deal.signal)}"
+                             data-score="${deal.score}"
+                             data-fmv="${deal.fmv ? deal.fmv.fmv : ''}"
+                             data-price="${l.totalPrice}">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="text-sm font-medium truncate">${esc(l.title)}</h4>
+                                    <div class="flex items-center gap-3 mt-1.5">
+                                        <span class="text-base font-bold mono">${formatPrice(l.totalPrice)}</span>
+                                        ${deal.fmv ? `<span class="text-[11px] text-[#737373] mono">FMV ${formatPrice(deal.fmv.fmv)}</span>` : ''}
+                                        <span class="text-xs font-semibold mono ${savingsColor}">${savings}</span>
+                                    </div>
+                                    <div class="flex items-center gap-3 mt-1 text-[11px] text-[#737373] mono">
+                                        ${typeBadge}
+                                        <span>${esc(l.sellerUsername)} (${l.sellerFeedbackPercent}%)</span>
+                                        ${l.shippingCost > 0 ? `<span>+${formatPrice(l.shippingCost)} ship</span>` : '<span>Free ship</span>'}
+                                        ${timeLeft ? `<span>${timeLeft}</span>` : ''}
+                                        ${bidInfo ? `<span>${bidInfo}</span>` : ''}
+                                    </div>
+                                    <div class="flex items-center gap-2 mt-1.5">
+                                        ${l.itemUrl ? `<a href="${esc(l.itemUrl)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs text-[#f97316] hover:underline mono">View on eBay <span class="iconify w-3 h-3" data-icon="lucide:external-link"></span></a>` : ''}
+                                        <button onclick="reportListing(this)" class="report-btn inline-flex items-center gap-1 text-xs text-[#737373] hover:text-[#FF5252] transition-colors mono" title="Report wrong listing">
+                                            <span class="iconify w-3 h-3" data-icon="lucide:flag"></span>
+                                            <span>Report</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0 flex flex-col items-end gap-2">
+                                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border mono ${signalBg(deal.signal)}">${signalLabel(deal.signal)}</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-14 h-1.5 bg-[#111] rounded-full overflow-hidden">
+                                            <div class="score-bar h-full rounded-full" style="width:${deal.score}%;background:${signalColor(deal.signal)}"></div>
+                                        </div>
+                                        <span class="text-[10px] font-semibold text-[#737373] mono">${deal.score}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                bhtml += '</div>';
+                $('#best-section').innerHTML = bhtml;
+            }
+        } else {
+            $('#best-section').innerHTML = `<p class="text-sm text-[#737373]">Could not load deals.</p>`;
+        }
+    }
+
+    async function renderWatchlist() {
+        const main = $('#main-content');
+        const email = getEmail();
+
+        if (!email) {
+            main.innerHTML = `
+                <div class="animate-in max-w-md mx-auto text-center py-12">
+                    <span class="iconify w-12 h-12 text-[#333] mx-auto mb-4" data-icon="lucide:bell-ring"></span>
+                    <h2 class="text-lg font-bold mb-2">Your Watchlist</h2>
+                    <p class="text-sm text-[#737373] mb-6">Enter your email to see your watched cards</p>
+                    <div class="flex gap-2">
+                        <input id="watchlist-email" type="email" placeholder="your@email.com" class="flex-1 bg-[#111] border border-[#222] rounded-md px-4 py-2 text-sm focus:outline-none focus:border-[#f97316] placeholder-[#737373] mono">
+                        <button onclick="loadWatchlistByEmail()" class="bg-[#f97316] hover:bg-[#fb923c] text-white rounded-md px-5 py-2 text-sm font-semibold transition-colors">View</button>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        main.innerHTML = `
+            <div class="animate-in">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xs font-semibold text-[#737373] uppercase tracking-wider">Your Watchlist</h2>
+                        <p class="text-sm text-[#737373] mt-1 mono">${esc(email)}</p>
+                    </div>
+                    <button onclick="clearWatchlistEmail()" class="text-xs text-[#737373] hover:text-white transition-colors mono">Change email</button>
+                </div>
+                <div id="watchlist-items" class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden"><div class="skeleton h-16 w-full"></div></div>
+            </div>`;
+
+        try {
+            const res = await fetch('/api/watchlist?email=' + encodeURIComponent(email));
+            const data = await res.json();
+            if (!data.entries || data.entries.length === 0) {
+                $('#watchlist-items').innerHTML = `
+                    <div class="text-center py-12 px-4">
+                        <p class="text-[#737373] text-sm">No watched cards yet.</p>
+                        <p class="text-[#737373]/60 text-xs mt-1">Use the "Watch this card" button on any card detail page.</p>
+                    </div>`;
+                return;
+            }
+            let html = '';
+            for (const entry of data.entries) {
+                const img = entry.imageUrl
+                    ? `<img src="${esc(entry.imageUrl)}" class="w-10 h-14 object-contain rounded-md" loading="lazy">`
+                    : `<div class="w-10 h-14 bg-[#111] rounded-md flex items-center justify-center"><span class="iconify w-5 h-5 text-[#333]" data-icon="lucide:image"></span></div>`;
+                html += `
+                    <a href="#/card/${encodeURIComponent(entry.cardId)}?grade=${entry.grade}&name=${encodeURIComponent(entry.cardName)}&setName=${encodeURIComponent(entry.setName || '')}&imageUrl=${encodeURIComponent(entry.imageUrl || '')}" class="flex items-center gap-4 px-4 py-3 border-b border-[#1a1a1a] table-row-hover block">
+                        ${img}
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-sm font-medium truncate">${esc(entry.cardName)}</h3>
+                            <p class="text-[11px] text-[#737373]">${esc(entry.setName || '')}</p>
+                            <span class="text-xs font-semibold text-[#f97316] mt-0.5 inline-block mono">${esc(entry.grader)} ${entry.grade}</span>
+                        </div>
+                        <span class="iconify w-4 h-4 text-[#333] flex-shrink-0" data-icon="lucide:chevron-right"></span>
+                    </a>`;
+            }
+            $('#watchlist-items').innerHTML = html;
+        } catch (err) {
+            $('#watchlist-items').innerHTML = `<div class="px-4 py-8 text-center text-[#FF5252] text-sm">${esc(err.message)}</div>`;
+        }
+    }
+
+    // ─── Watch Modal ───
+    window.openWatchModal = function(cardId, grade, cardName, setName, imageUrl) {
+        const modal = $('#watch-modal');
+        modal.classList.remove('hidden');
+        const email = getEmail();
+        $('#watch-modal-content').innerHTML = `
+            <h3 class="text-base font-bold mb-1">Watch this card</h3>
+            <p class="text-sm text-[#737373] mb-4">${esc(cardName)} &middot; PSA ${grade}</p>
+            <input id="watch-email" type="email" placeholder="your@email.com" value="${esc(email)}" class="w-full bg-[#111] border border-[#222] rounded-md px-4 py-2 text-sm focus:outline-none focus:border-[#f97316] placeholder-[#737373] mono mb-3">
+            <button id="watch-submit" onclick="submitWatch('${esc(cardId)}', ${grade}, '${esc(cardName)}', '${esc(setName)}', '${esc(imageUrl)}')" class="w-full bg-[#f97316] hover:bg-[#fb923c] text-white rounded-md px-4 py-2 text-sm font-semibold transition-colors">Notify me of deals</button>
+            <button onclick="closeWatchModal()" class="w-full text-center text-sm text-[#737373] hover:text-white mt-2 py-1 transition-colors">Cancel</button>`;
+        setTimeout(() => { const el = document.getElementById('watch-email'); if (el) el.focus(); }, 100);
+    };
+
+    window.closeWatchModal = function() {
+        $('#watch-modal').classList.add('hidden');
+    };
+
+    window.submitWatch = async function(cardId, grade, cardName, setName, imageUrl) {
+        const emailInput = $('#watch-email');
+        const email = emailInput.value.trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            emailInput.classList.add('border-[#FF5252]');
+            return;
+        }
+        const btn = $('#watch-submit');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        try {
+            const res = await fetch('/api/watchlist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, cardId, grade, cardName, setName, imageUrl }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to save');
+            }
+            setEmail(email);
+            updateWatchlistBadge();
+            $('#watch-modal-content').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="w-12 h-12 bg-green-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span class="iconify w-6 h-6 text-[#22c55e]" data-icon="lucide:check"></span>
+                    </div>
+                    <h3 class="text-base font-bold mb-1">You're watching!</h3>
+                    <p class="text-sm text-[#737373]">${esc(cardName)} &middot; PSA ${grade}</p>
+                    <p class="text-xs text-[#737373]/60 mt-2">You'll be notified when deals appear.</p>
+                    <button onclick="closeWatchModal()" class="mt-4 text-sm text-[#f97316] hover:underline mono">Close</button>
+                </div>`;
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Notify me of deals';
+            $('#watch-modal-content').insertAdjacentHTML('beforeend', `<p class="text-xs text-[#FF5252] mt-2">${esc(err.message)}</p>`);
+        }
+    };
+
+    window.loadWatchlistByEmail = function() {
+        const email = ($('#watchlist-email')).value.trim();
+        if (email) {
+            setEmail(email);
+            updateWatchlistBadge();
+            renderWatchlist();
+        }
+    };
+
+    window.clearWatchlistEmail = function() {
+        localStorage.removeItem('gacha_email');
+        renderWatchlist();
+    };
+
+    // ─── Router ───
+    function route() {
+        const hash = location.hash || '#/';
+        const searchInput = $('#search-input');
+
+        // Parse hash route
+        if (hash === '#/' || hash === '#') {
+            if (searchInput) searchInput.value = '';
+            renderHome();
+        } else if (hash.startsWith('#/search?')) {
+            const params = new URLSearchParams(hash.replace('#/search?', ''));
+            const q = params.get('q') || '';
+            if (searchInput) searchInput.value = q;
+            renderSearch(q);
+        } else if (hash.startsWith('#/card/')) {
+            const rest = hash.replace('#/card/', '');
+            const qIdx = rest.indexOf('?');
+            const id = qIdx >= 0 ? decodeURIComponent(rest.slice(0, qIdx)) : decodeURIComponent(rest);
+            const params = qIdx >= 0 ? new URLSearchParams(rest.slice(qIdx + 1)) : new URLSearchParams();
+            renderCardDetail(id, params);
+        } else if (hash === '#/watchlist') {
+            renderWatchlist();
+        } else {
+            renderHome();
+        }
+    }
+
+    // Search handler
+    const searchInput = $('#search-input');
+    let searchTimeout;
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const q = this.value.trim();
+            if (q) {
+                location.hash = '#/search?q=' + encodeURIComponent(q);
+            }
+        }
+    });
+
+    // Close modal on overlay click
+    $('#watch-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeWatchModal();
+    });
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', route);
+
+    // Initial route
+    route();
+    updateWatchlistBadge();
+})();
+</script>
+</body>
+</html>

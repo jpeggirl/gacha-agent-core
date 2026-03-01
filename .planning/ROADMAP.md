@@ -142,6 +142,21 @@ Plans:
 
 ---
 
+## Cross-Phase Backlog (Fomolt Learnings)
+
+These items span multiple phases and should be planned as explicit tasks, not absorbed implicitly:
+
+- [ ] Add a machine-readable API manifest endpoint (OpenAPI JSON or equivalent) for agent/tool interoperability.
+- [ ] Standardize all API responses with one envelope and structured errors (`code`, `hint`, `docs`, optional recovery `links`).
+- [ ] Add observability headers (`X-Request-Id`) and consistent rate-limit headers for bot-safe retries.
+- [ ] Define API key lifecycle hardening (rotation, recovery, and revoked-key behavior) and document runbook.
+- [ ] Add heartbeat contract for autonomous runtimes: service health + auth validity + scanner readiness checks.
+- [ ] Preserve architecture rule: OpenClaw skill remains a thin client over HTTP/core modules; no duplicated scoring/pricing logic in wrappers.
+- [ ] Publish split docs set (`intro`, `auth`, `skill`, `heartbeat`, `troubleshooting`) optimized for agent consumption.
+- [ ] Add lightweight CLI surface (`gacha` command) that wraps existing endpoints for operator and agent workflows.
+
+---
+
 ## Coverage Map
 
 | Requirement | Phase |

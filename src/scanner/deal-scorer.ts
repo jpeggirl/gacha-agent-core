@@ -190,7 +190,12 @@ export class DealScorer {
 
     // Population
     if (fmv.populationCount && fmv.populationCount < 100) {
-      parts.push(`Low PSA population (${fmv.populationCount}) — scarce`);
+      parts.push(`Low ${fmv.grader} population (${fmv.populationCount}) — scarce`);
+    }
+
+    // Approximate pricing note
+    if (fmv.pricingSource && fmv.pricingSource.includes('approximate')) {
+      parts.push('FMV is approximate (cross-grader estimate)');
     }
 
     return parts.join('. ') + '.';

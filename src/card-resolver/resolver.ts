@@ -1,11 +1,15 @@
+import { readFile } from 'node:fs/promises';
+import { resolve as pathResolve } from 'node:path';
 import type {
   ResolvedCard,
   CardCandidate,
   ResolveResult,
   GachaAgentConfig,
+  Grader,
 } from '../types/index.js';
 
-const CONFIDENCE_THRESHOLD = 0.7;
+const AUTO_PROCEED_THRESHOLD = 0.85;
+const DISAMBIGUATE_THRESHOLD = 0.70;
 
 interface ParseTitleResponse {
   success?: boolean;
@@ -42,6 +46,7 @@ interface ParseTitleV2Response {
     parsed?: {
       confidence?: number;
       variant?: string;
+      cardName?: string;
     };
     matches?: Array<{
       tcgPlayerId?: string | number;
@@ -50,10 +55,24 @@ interface ParseTitleV2Response {
       setId?: string | number;
       cardNumber?: string;
       rarity?: string;
+      year?: number;
       matchScore?: number;
       matchReasons?: string[];
     }>;
   };
+  error?: string;
+}
+
+interface SearchCardsResponse {
+  data?: Array<{
+    tcgPlayerId?: string | number;
+    name: string;
+    setName?: string;
+    setId?: string | number;
+    cardNumber?: string;
+    rarity?: string;
+    imageUrl?: string;
+  }>;
   error?: string;
 }
 
@@ -66,21 +85,91 @@ interface V2MatchInput {
   variant?: string;
 }
 
+interface AliasFile {
+  exact: Record<string, string>;
+  patterns: Array<{ match: string; expand: string }>;
+}
+
 export class CardResolver {
   private baseUrl: string;
   private apiKey: string;
+  private aliasLoadPromise: Promise<void> | null = null;
+  private aliasMap: Map<string, string> = new Map();
+  private aliasPatterns: Array<{ match: RegExp; expand: string }> = [];
 
   constructor(config: GachaAgentConfig) {
     this.baseUrl = this.normalizeBaseUrl(config.pokemonPriceTracker.baseUrl);
     this.apiKey = config.pokemonPriceTracker.apiKey;
   }
 
+  private async loadAliases(): Promise<void> {
+    if (this.aliasLoadPromise) return this.aliasLoadPromise;
+    this.aliasLoadPromise = (async () => {
+      try {
+        const aliasPath = pathResolve(__dirname, '../../data/card-aliases.json');
+        const raw = await readFile(aliasPath, 'utf-8');
+        const data = JSON.parse(raw) as AliasFile;
+        for (const [key, value] of Object.entries(data.exact ?? {})) {
+          this.aliasMap.set(key.toLowerCase(), value);
+        }
+        for (const pattern of data.patterns ?? []) {
+          this.aliasPatterns.push({
+            match: new RegExp(pattern.match, 'i'),
+            expand: pattern.expand,
+          });
+        }
+      } catch (err) {
+        console.warn('[CardResolver] Failed to load card aliases:', err);
+      }
+    })();
+    return this.aliasLoadPromise;
+  }
+
+  private expandAlias(query: string): string {
+    const trimmed = query.trim();
+
+    // Strip trailing grade modifier (e.g. "PSA 10", "grade 9", "BGS 9.5")
+    const gradePattern = /\s+(psa|bgs|cgc|grade)\s+[\d.]+$/i;
+    const gradeMatch = trimmed.match(gradePattern);
+    const withoutGrade = gradeMatch
+      ? trimmed.slice(0, gradeMatch.index).trim()
+      : trimmed;
+    const gradeSuffix = gradeMatch ? gradeMatch[0] : '';
+
+    // Exact match (case-insensitive)
+    const exactMatch = this.aliasMap.get(withoutGrade.toLowerCase());
+    if (exactMatch) {
+      return exactMatch + gradeSuffix;
+    }
+
+    // Pattern match (first wins)
+    for (const pattern of this.aliasPatterns) {
+      if (pattern.match.test(withoutGrade)) {
+        return withoutGrade.replace(pattern.match, pattern.expand) + gradeSuffix;
+      }
+    }
+
+    return query;
+  }
+
   async resolve(query: string): Promise<ResolveResult> {
-    const normalized = this.normalizeQuery(query);
+    await this.loadAliases();
+    const expanded = this.expandAlias(query);
+    const normalized = this.normalizeQuery(expanded);
 
     try {
       const response = await this.callParseTitle(normalized);
-      const candidates = this.buildCandidates(response, query);
+      let candidates = this.buildCandidates(response, query);
+
+      // Fallback: if parse-title returned no matches, try the search endpoint
+      if (candidates.length === 0) {
+        const searchQuery = this.buildSearchQuery(response, normalized);
+        if (searchQuery) {
+          const searchResponse = await this.callSearchCards(searchQuery);
+          candidates = this.buildSearchCandidates(searchResponse, query);
+        }
+      }
+
       if (candidates.length === 0) {
         return {
           success: false,
@@ -90,19 +179,44 @@ export class CardResolver {
         };
       }
       const bestMatch = candidates[0]?.card;
-      const needsDisambiguation =
-        !bestMatch || bestMatch.confidence < CONFIDENCE_THRESHOLD;
+      const confidence = bestMatch?.confidence ?? 0;
+
+      // Two-tier confidence gate:
+      // >= AUTO_PROCEED_THRESHOLD (0.85): auto-proceed
+      // >= DISAMBIGUATE_THRESHOLD (0.70): needs disambiguation
+      // < DISAMBIGUATE_THRESHOLD: no match
+      if (confidence >= AUTO_PROCEED_THRESHOLD) {
+        return {
+          success: true,
+          bestMatch,
+          candidates,
+          originalQuery: query,
+          needsDisambiguation: false,
+        };
+      }
+
+      if (confidence >= DISAMBIGUATE_THRESHOLD) {
+        return {
+          success: false,
+          bestMatch: undefined,
+          candidates,
+          originalQuery: query,
+          needsDisambiguation: true,
+          disambiguationReason: `Confidence ${(confidence * 100).toFixed(0)}% is below auto-proceed threshold (${(AUTO_PROCEED_THRESHOLD * 100).toFixed(0)}%)`,
+        };
+      }
 
       return {
-        success: !needsDisambiguation && !!bestMatch,
-        bestMatch: needsDisambiguation ? undefined : bestMatch,
+        success: false,
+        bestMatch: undefined,
         candidates,
         originalQuery: query,
-        needsDisambiguation,
+        needsDisambiguation: false,
       };
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[CardResolver] ${message}`);
       return {
         success: false,
         candidates: [],
@@ -115,12 +229,13 @@ export class CardResolver {
   async resolveWithGrade(
     query: string,
     grade: number,
+    grader: Grader = 'PSA',
   ): Promise<ResolveResult> {
     // Append grade info to help the parser if not already present
-    const gradePattern = /\b(psa|bgs|cgc)\s*\d+/i;
+    const gradePattern = /\b(psa|bgs|cgc|sgc)\s*\d+/i;
     const queryWithGrade = gradePattern.test(query)
       ? query
-      : `${query} PSA ${grade}`;
+      : `${query} ${grader} ${grade}`;
     return this.resolve(queryWithGrade);
   }
 
@@ -240,6 +355,13 @@ export class CardResolver {
     for (const [index, match] of matches.entries()) {
       if (!match?.name) continue;
 
+      // Only apply the parsed variant to a candidate if its own name/rarity
+      // already contains that variant. This prevents e.g. "ex" being applied
+      // to "Tohoku's Pikachu" just because the query contained "ex".
+      const candidateVariant = this.candidateMatchesVariant(variant, match)
+        ? variant
+        : undefined;
+
       const matchConfidence = this.clampConfidence(match.matchScore ?? 0);
       const baseConfidence = this.clampConfidence(
         Math.max(matchConfidence, parsedConfidence * 0.7),
@@ -250,7 +372,7 @@ export class CardResolver {
           name: match.name,
           setName: match.setName,
           cardNumber: match.cardNumber,
-          variant,
+          variant: candidateVariant,
         },
         index,
       );
@@ -271,9 +393,9 @@ export class CardResolver {
           setName: match.setName ?? 'Unknown Set',
           setCode,
           number,
-          year: extractedYear,
+          year: match.year ?? extractedYear,
           rarity: match.rarity,
-          variant,
+          variant: candidateVariant,
           confidence,
         },
         confidence,
@@ -285,6 +407,17 @@ export class CardResolver {
 
     candidates.sort((a, b) => b.confidence - a.confidence);
     return candidates;
+  }
+
+  private candidateMatchesVariant(
+    parsedVariant: string | undefined,
+    match: { name: string; rarity?: string },
+  ): boolean {
+    if (!parsedVariant) return false;
+    const combined = this.normalizeForMatch(
+      `${match.name} ${match.rarity ?? ''}`,
+    );
+    return this.detectVariant(combined) === parsedVariant.toLowerCase();
   }
 
   private clampConfidence(value: number): number {
@@ -330,6 +463,16 @@ export class CardResolver {
       adjustment += 0.12;
     }
 
+    // Penalize candidates with zero name-token overlap with the query.
+    // e.g. "MEGA LATIAS EX" has zero overlap with "Tohoku's Pikachu".
+    const nameTokens = normalizedName.split(/\s+/).filter((t) => t.length > 1);
+    if (nameTokens.length > 0) {
+      const nameOverlap = nameTokens.filter((t) => normalizedQuery.includes(t));
+      if (nameOverlap.length === 0) {
+        adjustment -= 0.25;
+      }
+    }
+
     const queryTokens = this.queryTokens(normalizedQuery);
     const candidateTokens = new Set(
       `${normalizedName} ${normalizedSet} ${normalizedNumber}`
@@ -341,9 +484,13 @@ export class CardResolver {
       adjustment += (shared.length / queryTokens.length) * 0.18;
     }
 
+    // Number-match boost: reduced when there's no name overlap to prevent
+    // number-only matches from winning over name-matching candidates.
+    const hasNameOverlap = nameTokens.length > 0 &&
+      nameTokens.some((t) => normalizedQuery.includes(t));
     const numberHints = this.extractNumberHints(normalizedQuery);
     if (numberHints.some((hint) => normalizedNumber.includes(hint))) {
-      adjustment += 0.18;
+      adjustment += hasNameOverlap ? 0.18 : 0.06;
     } else if (
       numberHints.some((hint) => normalizedSet.includes(hint))
     ) {
@@ -371,6 +518,7 @@ export class CardResolver {
       'psa',
       'bgs',
       'cgc',
+      'sgc',
       'the',
       'and',
       'grade',
@@ -416,6 +564,134 @@ export class CardResolver {
     }
 
     return Array.from(hints);
+  }
+
+  async enrichCandidatesWithImages(
+    candidates: CardCandidate[],
+  ): Promise<CardCandidate[]> {
+    const top = candidates.slice(0, 5);
+    const enriched = await Promise.all(
+      top.map(async (candidate) => {
+        if (candidate.card.imageUrl) return candidate;
+        const imageUrl = await this.fetchImageUrl(candidate.card.id);
+        if (!imageUrl) return candidate;
+        return {
+          ...candidate,
+          card: { ...candidate.card, imageUrl },
+        };
+      }),
+    );
+    return [...enriched, ...candidates.slice(5)];
+  }
+
+  async fetchImageUrl(tcgPlayerId: string): Promise<string | null> {
+    // Only fetch for numeric IDs (tcgPlayerId)
+    if (!/^\d+$/.test(tcgPlayerId)) return null;
+
+    try {
+      const url = `${this.baseUrl}/api/v2/cards?tcgPlayerId=${tcgPlayerId}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      if (!res.ok) return null;
+
+      const body = (await res.json()) as {
+        data?: { imageUrl?: string } | Array<{ imageUrl?: string }>;
+      };
+      if (Array.isArray(body.data)) {
+        return body.data[0]?.imageUrl ?? null;
+      }
+      return body.data?.imageUrl ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildSearchQuery(
+    parseTitleResponse: ParseTitleApiResponse,
+    normalizedQuery: string,
+  ): string | null {
+    // Prefer cardName from parse-title's parsed data if available
+    const v2 = parseTitleResponse as ParseTitleV2Response;
+    let searchText = v2.data?.parsed?.cardName ?? normalizedQuery;
+
+    // Strip grade-related terms (the search endpoint doesn't use them)
+    searchText = searchText
+      .replace(/\b(psa|bgs|cgc|sgc)\s*[\d.]+\b/gi, '')
+      .replace(/\bgrade\s*\d+\b/gi, '')
+      .trim();
+
+    return searchText.length > 0 ? searchText : null;
+  }
+
+  private async callSearchCards(query: string): Promise<SearchCardsResponse> {
+    const url = `${this.baseUrl}/api/v2/cards?search=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `PokemonPriceTracker search API error: ${res.status} ${res.statusText}`,
+      );
+    }
+
+    return res.json() as Promise<SearchCardsResponse>;
+  }
+
+  private buildSearchCandidates(
+    response: SearchCardsResponse,
+    originalQuery: string,
+  ): CardCandidate[] {
+    const candidates: CardCandidate[] = [];
+    const results = response.data ?? [];
+    const extractedYear = this.extractYear(originalQuery);
+
+    for (const [index, item] of results.entries()) {
+      if (!item?.name) continue;
+
+      const setCode = item.setId != null ? String(item.setId) : 'unknown';
+      const number = item.cardNumber ?? 'unknown';
+      const id =
+        item.tcgPlayerId != null
+          ? String(item.tcgPlayerId)
+          : `${setCode}:${number}:${item.name}`;
+
+      const baseConfidence = 0.6;
+      const relevanceAdjustment = this.computeRelevanceAdjustment(
+        originalQuery,
+        {
+          name: item.name,
+          setName: item.setName,
+          cardNumber: item.cardNumber,
+        },
+        index,
+      );
+      const confidence = this.clampConfidence(
+        baseConfidence + relevanceAdjustment,
+      );
+
+      candidates.push({
+        card: {
+          id,
+          name: item.name,
+          setName: item.setName ?? 'Unknown Set',
+          setCode,
+          number,
+          year: extractedYear,
+          rarity: item.rarity,
+          imageUrl: item.imageUrl,
+          confidence,
+        },
+        confidence,
+        matchReason: 'Match from search fallback',
+      });
+    }
+
+    candidates.sort((a, b) => b.confidence - a.confidence);
+    return candidates;
   }
 
   private normalizeBaseUrl(baseUrl: string): string {

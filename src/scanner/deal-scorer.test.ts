@@ -21,6 +21,7 @@ const card: ResolvedCard = {
 const fmv: FairMarketValue = {
   cardId: 'base1-4',
   grade: 9,
+  grader: 'PSA',
   fmv: 5000,
   currency: 'USD',
   prices: [],
@@ -115,5 +116,27 @@ describe('DealScorer', () => {
     const deal = scorer.score(listing, card, fmv);
     expect(deal.reasoning).toBeTruthy();
     expect(deal.reasoning.length).toBeGreaterThan(10);
+  });
+
+  it('includes approximate FMV note when pricingSource contains "approximate"', () => {
+    const approxFmv: FairMarketValue = {
+      ...fmv,
+      grader: 'CGC',
+      pricingSource: 'PriceCharting PSA 10 (approximate for CGC 10)',
+    };
+    const listing = makeListing({ totalPrice: 3500 });
+    const deal = scorer.score(listing, card, approxFmv);
+    expect(deal.reasoning).toContain('approximate');
+  });
+
+  it('uses grader name in population reasoning', () => {
+    const bgsFmv: FairMarketValue = {
+      ...fmv,
+      grader: 'BGS',
+      populationCount: 50,
+    };
+    const listing = makeListing({ totalPrice: 3500 });
+    const deal = scorer.score(listing, card, bgsFmv);
+    expect(deal.reasoning).toContain('Low BGS population');
   });
 });
