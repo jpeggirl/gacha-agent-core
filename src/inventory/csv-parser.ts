@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { InventoryItem, Grader } from '../types/index.js';
+import type { SetAliasRegistry } from '../search/set-aliases.js';
+import { computeSKU } from '../search/sku.js';
 
 const VALID_GRADERS = new Set<string>(['PSA', 'BGS', 'CGC', 'SGC']);
 
@@ -21,7 +23,7 @@ export function parseGradeNumber(gradeText: string): number {
  * Parse a Gacha DB export CSV (22K+ rows with uuid, details JSON blob).
  * Filters to only PSA cards (cardId starts with "psa-") that are enabled.
  */
-export function parseGachaExportCSV(csvContent: string): ParseResult {
+export function parseGachaExportCSV(csvContent: string, registry?: SetAliasRegistry): ParseResult {
   const lines = csvContent.trim().split(/\r?\n/);
   if (lines.length < 2) {
     return { items: [], errors: ['CSV must have a header row and at least one data row'] };
@@ -97,11 +99,23 @@ export function parseGachaExportCSV(csvContent: string): ParseResult {
 
       const createdAt = getField(fields, columnMap, 'createdat')?.trim() ?? new Date().toISOString();
 
+      const setName = (details.setName as string | undefined)?.trim() ?? '';
+      const cardNumber = (details.cardNumber as string | undefined)?.trim() ?? '';
+
+      // Compute SKU if registry is available
+      let sku: string | undefined;
+      if (registry && setName && cardNumber) {
+        const setMatch = registry.lookup(setName);
+        if (setMatch) {
+          sku = computeSKU(setMatch.setCode, cardNumber) || undefined;
+        }
+      }
+
       items.push({
         id: getField(fields, columnMap, 'uuid')?.trim() ?? randomUUID(),
         name,
-        setName: (details.setName as string | undefined)?.trim() ?? '',
-        number: (details.cardNumber as string | undefined)?.trim() ?? '',
+        setName,
+        number: cardNumber,
         grade,
         grader,
         price,
@@ -111,6 +125,7 @@ export function parseGachaExportCSV(csvContent: string): ParseResult {
         certNumber: (details.certNumber as string | undefined)?.trim() || undefined,
         populationCount: typeof totalPopulation === 'number' ? totalPopulation : undefined,
         year: year && !isNaN(year) ? year : undefined,
+        sku,
         status: 'available',
         createdAt,
       });
@@ -122,7 +137,7 @@ export function parseGachaExportCSV(csvContent: string): ParseResult {
   return { items, errors };
 }
 
-export function parseInventoryCSV(csvContent: string): ParseResult {
+export function parseInventoryCSV(csvContent: string, registry?: SetAliasRegistry): ParseResult {
   const lines = csvContent.trim().split(/\r?\n/);
   if (lines.length < 2) {
     return { items: [], errors: ['CSV must have a header row and at least one data row'] };
@@ -174,11 +189,23 @@ export function parseInventoryCSV(csvContent: string): ParseResult {
       const quantityStr = getField(fields, columnMap, 'quantity')?.trim();
       const quantity = quantityStr ? parseInt(quantityStr, 10) : 1;
 
+      const setNameVal = getField(fields, columnMap, 'set')?.trim() ?? '';
+      const numberVal = getField(fields, columnMap, 'number')?.trim() ?? '';
+
+      // Compute SKU if registry is available
+      let csvSku: string | undefined;
+      if (registry && setNameVal && numberVal) {
+        const setMatch = registry.lookup(setNameVal);
+        if (setMatch) {
+          csvSku = computeSKU(setMatch.setCode, numberVal) || undefined;
+        }
+      }
+
       items.push({
         id: randomUUID(),
         name,
-        setName: getField(fields, columnMap, 'set')?.trim() ?? '',
-        number: getField(fields, columnMap, 'number')?.trim() ?? '',
+        setName: setNameVal,
+        number: numberVal,
         grade,
         grader,
         price,
@@ -186,6 +213,7 @@ export function parseInventoryCSV(csvContent: string): ParseResult {
         imageUrl: getField(fields, columnMap, 'image_url')?.trim() || undefined,
         variant: getField(fields, columnMap, 'variant')?.trim() || undefined,
         certNumber: getField(fields, columnMap, 'cert_number')?.trim() || undefined,
+        sku: csvSku,
         status: 'available',
         createdAt: new Date().toISOString(),
       });

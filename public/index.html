@@ -119,6 +119,13 @@
     </div>
 </div>
 
+<!-- Report Pricing Modal -->
+<div id="report-modal" class="hidden fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4">
+    <div class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-6 w-full max-w-sm animate-in">
+        <div id="report-modal-content"></div>
+    </div>
+</div>
+
 <script>
 (function() {
     'use strict';
@@ -530,8 +537,18 @@
             <div class="mb-4">
                 <h2 class="text-xs font-semibold text-[#737373] uppercase tracking-wider">Recent Searches</h2>
             </div>
-            <div id="popular-grid" class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden">${skeletonTable(10)}</div>`;
+            <div id="popular-grid" class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden">${skeletonTable(5)}</div>
+            <div class="mt-6 mb-4">
+                <h2 class="text-xs font-semibold text-[#737373] uppercase tracking-wider">Featured Auction Deals</h2>
+            </div>
+            <div id="featured-deals" class="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg overflow-hidden">${skeletonTable(3)}</div>`;
 
+        // Fire both fetches in parallel
+        fetchPopularCards();
+        fetchFeaturedDeals();
+    }
+
+    async function fetchPopularCards() {
         try {
             const res = await fetch('/api/popular');
             const data = await res.json();
@@ -539,7 +556,6 @@
                 $('#popular-grid').innerHTML = '<div class="px-4 py-8 text-center text-[#737373] text-sm">No recent searches yet. Search for a card to get started.</div>';
                 return;
             }
-            // Table header
             let html = '';
             html += `<div class="hidden sm:flex items-center gap-4 px-4 py-2 border-b border-[#1a1a1a] text-[10px] text-[#737373] uppercase tracking-wider mono">
                 <div class="w-10 flex-shrink-0"></div>
@@ -550,13 +566,70 @@
                     <span class="w-4"></span>
                 </div>
             </div>`;
-            for (const item of data.cards) {
+            for (const item of data.cards.slice(0, 5)) {
                 cardCache[item.card.id] = item.card;
                 html += cardTableRow(item.card, { grade: item.defaultGrade, fmv: item.fmv });
             }
             $('#popular-grid').innerHTML = html;
         } catch (err) {
             $('#popular-grid').innerHTML = `<div class="px-4 py-8 text-center text-[#FF5252] text-sm">Failed to load popular cards: ${esc(err.message)}</div>`;
+        }
+    }
+
+    async function fetchFeaturedDeals() {
+        const container = $('#featured-deals');
+        if (!container) return;
+        try {
+            const res = await fetch('/api/featured-deals');
+            const data = await res.json();
+            if (!data.deals || data.deals.length === 0) {
+                container.innerHTML = '<div class="px-4 py-8 text-center text-[#737373] text-sm">No featured deals right now. Check back soon.</div>';
+                return;
+            }
+            let html = `<div class="hidden sm:grid grid-cols-[1fr_70px_70px_60px_80px_70px] gap-2 px-4 py-2 border-b border-[#1a1a1a] text-[10px] text-[#737373] uppercase tracking-wider mono">
+                <span>Card</span>
+                <span class="text-right">Bid</span>
+                <span class="text-right">FMV</span>
+                <span class="text-right">Save</span>
+                <span class="text-center">Signal</span>
+                <span class="text-right">Ends</span>
+            </div>`;
+            for (const deal of data.deals) {
+                const l = deal.listing;
+                const card = deal.card;
+                cardCache[card.id] = card;
+                const savings = deal.savingsPercent > 0 ? `-${deal.savingsPercent.toFixed(0)}%` : `+${Math.abs(deal.savingsPercent).toFixed(0)}%`;
+                const savingsColor = deal.savingsPercent > 0 ? 'text-green-400' : 'text-red-400';
+                const timeLeft = formatTimeRemaining(l.endDate);
+                const urgentClass = timeLeft.match(/^\d+m$/) || timeLeft.match(/^[0-2]h/) ? 'text-[#FF5252] font-semibold' : 'text-[#f97316]';
+                const img = card.imageUrl
+                    ? `<img src="${esc(card.imageUrl)}" alt="${esc(card.name)}" class="w-8 h-11 object-contain rounded bg-[#111]" loading="lazy">`
+                    : `<div class="w-8 h-11 bg-[#111] rounded flex items-center justify-center"><span class="iconify w-4 h-4 text-[#333]" data-icon="lucide:image"></span></div>`;
+                const detailHref = `#/card/${encodeURIComponent(card.id)}?grade=${deal.grade}&name=${encodeURIComponent(card.name)}&setName=${encodeURIComponent(card.setName || '')}&number=${encodeURIComponent(card.number || '')}&year=${card.year || ''}&rarity=${encodeURIComponent(card.rarity || '')}&variant=${encodeURIComponent(card.variant || '')}&imageUrl=${encodeURIComponent(card.imageUrl || '')}`;
+                html += `
+                    <a href="${detailHref}" class="sm:grid sm:grid-cols-[1fr_70px_70px_60px_80px_70px] sm:gap-2 sm:items-center flex flex-wrap items-start gap-2 px-4 py-3 border-b border-[#1a1a1a] table-row-hover block">
+                        <div class="flex items-center gap-3 min-w-0">
+                            ${img}
+                            <div class="min-w-0">
+                                <h4 class="text-sm font-medium truncate">${esc(card.name)}</h4>
+                                <p class="text-[10px] text-[#737373] truncate">${esc(card.setName || '')}${card.number ? ' #' + esc(card.number) : ''} &middot; PSA ${deal.grade}</p>
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold mono text-right">${formatPriceFull(l.totalPrice)}</span>
+                        <span class="text-sm mono text-right text-[#737373]">${formatPrice(deal.fmv)}</span>
+                        <span class="text-xs font-semibold mono text-right ${savingsColor}">${savings}</span>
+                        <div class="text-center">
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold border mono ${signalBg(deal.signal)}">${signalLabel(deal.signal)}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs mono ${urgentClass}">${timeLeft}</span>
+                            ${l.bidCount != null ? `<div class="text-[10px] text-[#737373] mono">${l.bidCount} bid${l.bidCount !== 1 ? 's' : ''}</div>` : ''}
+                        </div>
+                    </a>`;
+            }
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = '<div class="px-4 py-8 text-center text-[#737373] text-sm">No featured deals right now. Check back soon.</div>';
         }
     }
 
@@ -663,7 +736,10 @@
         });
 
         // Grade link builder (reused by FMV table cells)
-        const gradeHref = (g) => `#/card/${encodeURIComponent(id)}?grade=${g}&${qp.toString()}&imageUrl=${encodeURIComponent(card.imageUrl || '')}`;
+        const gradeHref = (g) => `#/card/${encodeURIComponent(id)}?grade=${g}&${qp.toString()}&imageUrl=${encodeURIComponent(card.imageUrl || '')}&auto=1`;
+
+        // Store card context for report modal (avoids inline escaping issues with quotes)
+        window._reportCtx = { cardId: id, grade, cardName: card.name, setName: card.setName || '' };
 
         const img = card.imageUrl
             ? `<img src="${esc(card.imageUrl)}" alt="${esc(card.name)}" class="w-full max-w-[200px] rounded-lg">`
@@ -693,7 +769,13 @@
 
                         <!-- Pricing section -->
                         <div class="mt-6">
-                            <h3 class="text-[10px] font-semibold text-[#737373] uppercase tracking-wider mb-3 mono">Pricing Analysis</h3>
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-[10px] font-semibold text-[#737373] uppercase tracking-wider mono">Pricing Analysis</h3>
+                                <button onclick="openReportModal()" class="inline-flex items-center gap-1 text-[10px] text-[#737373] hover:text-[#FF5252] transition-colors mono" title="Report pricing error">
+                                    <span class="iconify w-3 h-3" data-icon="lucide:flag"></span>
+                                    <span>Report</span>
+                                </button>
+                            </div>
                             <div id="pricing-section">
                                 <div class="space-y-2">
                                     <div class="skeleton h-10 w-full rounded-md"></div>
@@ -1271,6 +1353,65 @@
         }
     };
 
+    // ─── Report Pricing Modal ───
+    window.openReportModal = function() {
+        const ctx = window._reportCtx;
+        if (!ctx) return;
+        const modal = $('#report-modal');
+        modal.classList.remove('hidden');
+        $('#report-modal-content').innerHTML = `
+            <h3 class="text-base font-bold mb-1">Report pricing error</h3>
+            <p class="text-sm text-[#737373] mb-4">${esc(ctx.cardName)} &middot; PSA ${ctx.grade}</p>
+            <textarea id="report-message" placeholder="What's wrong? (e.g. correct PriceCharting URL, wrong card match)" rows="3" maxlength="500" class="w-full bg-[#111] border border-[#222] rounded-md px-4 py-2 text-sm focus:outline-none focus:border-[#f97316] placeholder-[#737373] mono mb-3 resize-none"></textarea>
+            <input id="report-email" type="email" placeholder="Email (optional)" class="w-full bg-[#111] border border-[#222] rounded-md px-4 py-2 text-sm focus:outline-none focus:border-[#f97316] placeholder-[#737373] mono mb-3">
+            <button id="report-submit" onclick="submitPricingReport()" class="w-full bg-[#FF5252] hover:bg-[#ff6b6b] text-white rounded-md px-4 py-2 text-sm font-semibold transition-colors">Submit report</button>
+            <button onclick="closeReportModal()" class="w-full text-center text-sm text-[#737373] hover:text-white mt-2 py-1 transition-colors">Cancel</button>`;
+        setTimeout(() => { const el = document.getElementById('report-message'); if (el) el.focus(); }, 100);
+    };
+
+    window.closeReportModal = function() {
+        $('#report-modal').classList.add('hidden');
+    };
+
+    window.submitPricingReport = async function() {
+        const ctx = window._reportCtx;
+        if (!ctx) return;
+        const msgInput = $('#report-message');
+        const message = msgInput.value.trim();
+        if (!message) {
+            msgInput.classList.add('border-[#FF5252]');
+            return;
+        }
+        const email = $('#report-email').value.trim() || undefined;
+        const btn = $('#report-submit');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        try {
+            const res = await fetch('/api/pricing-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cardId: ctx.cardId, cardName: ctx.cardName, setName: ctx.setName, grade: ctx.grade, message, email }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to submit');
+            }
+            $('#report-modal-content').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="w-12 h-12 bg-green-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span class="iconify w-6 h-6 text-[#22c55e]" data-icon="lucide:check"></span>
+                    </div>
+                    <h3 class="text-base font-bold mb-1">Report submitted</h3>
+                    <p class="text-sm text-[#737373]">Thanks for helping improve pricing data.</p>
+                    <button onclick="closeReportModal()" class="mt-4 text-sm text-[#f97316] hover:underline mono">Close</button>
+                </div>`;
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Submit report';
+            $('#report-modal-content').insertAdjacentHTML('beforeend', `<p class="text-xs text-[#FF5252] mt-2">${esc(err.message)}</p>`);
+        }
+    };
+
     window.loadWatchlistByEmail = function() {
         const email = ($('#watchlist-email')).value.trim();
         if (email) {
@@ -1325,9 +1466,12 @@
         }
     });
 
-    // Close modal on overlay click
+    // Close modals on overlay click
     $('#watch-modal').addEventListener('click', function(e) {
         if (e.target === this) closeWatchModal();
+    });
+    $('#report-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeReportModal();
     });
 
     // Listen for hash changes

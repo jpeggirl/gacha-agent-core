@@ -13,9 +13,10 @@ import { WatchlistManager } from './watchlist/manager.js';
 import { ChatAgent } from './agent/chat.js';
 import { CascadingSearch } from './search/cascading-search.js';
 import { CardRegistry } from './search/card-registry.js';
+import { SetAliasRegistry } from './search/set-aliases.js';
 import { loadConfig } from './config.js';
 import { randomUUID } from 'node:crypto';
-import type { ChatMessage, DealSignal, EbayListing, EbaySearchOverride, FairMarketValue, ListingReport, PopularCardSeed, RecentSearchEntry, ResolvedCard } from './types/index.js';
+import type { ChatMessage, DealSignal, EbayListing, EbaySearchOverride, FairMarketValue, ListingReport, PopularCardSeed, PricingReport, RecentSearchEntry, ResolvedCard, ScoredDeal } from './types/index.js';
 
 const GACHA_ADMIN_KEY = process.env.GACHA_ADMIN_KEY ?? process.env.GACHA_API_KEY ?? 'gacha_dev_key';
 
@@ -91,7 +92,21 @@ function json(res: ServerResponse, status: number, data: unknown) {
 
 const RECENT_SEARCHES_KEY = 'recent_searches';
 const MAX_RECENT_SEARCHES = 30;
+const DISPLAY_RECENT_SEARCHES = 5;
 const PPT_CONCURRENCY = 3; // Max concurrent PPT API calls to avoid rate limits
+
+// ─── Featured Deals Cache ───
+interface FeaturedDeal {
+  listing: EbayListing;
+  card: ResolvedCard;
+  grade: number;
+  fmv: number;
+  score: number;
+  signal: string;
+  savingsPercent: number;
+}
+let featuredDealsCache: { deals: FeaturedDeal[]; generatedAt: string; expiresAt: number } | null = null;
+const FEATURED_DEALS_TTL_MS = 5 * 60 * 1000;
 
 /** Run async tasks with bounded concurrency to avoid API rate limits. */
 async function throttled<T>(items: T[], concurrency: number, fn: (item: T) => Promise<unknown>): Promise<PromiseSettledResult<unknown>[]> {
@@ -150,7 +165,13 @@ async function main() {
   const resolver = new CardResolver(config);
   const priceEngine = new PriceEngine(config);
   const dealScorer = new DealScorer();
-  const inventoryManager = new InventoryManager(storage);
+
+  // Load set alias registry for SKU computation and query normalization
+  const setAliasRegistry = new SetAliasRegistry();
+  setAliasRegistry.loadFromFile();
+  console.log(`  Loaded set alias registry (${setAliasRegistry.size} aliases)`);
+
+  const inventoryManager = new InventoryManager(storage, setAliasRegistry);
 
   let scanner: EbayScanner | null = null;
   if (config.ebay) {
@@ -159,7 +180,7 @@ async function main() {
 
   const ebayOverrides = new EbayOverrideRegistry(storage);
   const cardRegistry = new CardRegistry(storage);
-  const cascadingSearch = new CascadingSearch(inventoryManager, resolver, cardRegistry);
+  const cascadingSearch = new CascadingSearch(inventoryManager, resolver, cardRegistry, setAliasRegistry);
   const watchlistManager = new WatchlistManager(storage);
 
   let chatAgent: ChatAgent | null = null;
@@ -385,7 +406,7 @@ async function main() {
         const defaultGrade = 10;
 
         const recentResults = await throttled(
-          recentSearches.slice(0, MAX_RECENT_SEARCHES),
+          recentSearches.slice(0, DISPLAY_RECENT_SEARCHES),
           PPT_CONCURRENCY,
           async (entry) => {
             let fmv: number | null = null;
@@ -405,6 +426,76 @@ async function main() {
         return json(res, 200, { cards });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        return json(res, 500, { error: message });
+      }
+    }
+
+    // GET /api/featured-deals — Curated auction deals from whitelisted sellers
+    if (method === 'GET' && path === '/api/featured-deals') {
+      if (!scanner) {
+        return json(res, 503, { error: 'eBay scanner not configured.' });
+      }
+      const sellers = config.ebay?.whitelistSellers;
+      if (!sellers || sellers.length === 0) {
+        return json(res, 200, { deals: [] });
+      }
+      // Return cached if still fresh
+      if (featuredDealsCache && Date.now() < featuredDealsCache.expiresAt) {
+        return json(res, 200, { deals: featuredDealsCache.deals, generatedAt: featuredDealsCache.generatedAt, cached: true });
+      }
+      try {
+        const allListings = await scanner.scanSellerAuctions(sellers, 24);
+        // Keep only Pokemon cards (sellers list sports cards too) and cap to 20 to avoid PPT rate limits
+        const pokemonOnly = allListings.filter((l) => /pokemon/i.test(l.title));
+        const listings = pokemonOnly.slice(0, 20);
+        const deals: FeaturedDeal[] = [];
+
+        await throttled(listings, 2, async (listing) => {
+          // Extract PSA grade from title
+          const gradeMatch = listing.title.match(/\bPSA\s*(\d{1,2})\b/i);
+          if (!gradeMatch) return;
+          const grade = parseInt(gradeMatch[1]!, 10);
+          if (grade < 1 || grade > 10) return;
+
+          // Resolve card from title
+          let resolved;
+          try {
+            resolved = await resolver.resolve(listing.title);
+          } catch { return; }
+          if (!resolved.success || !resolved.bestMatch) return;
+          const card = resolved.bestMatch;
+
+          // Get FMV
+          let fmvResult;
+          try {
+            fmvResult = await priceEngine.getFMV(card, grade, 'PSA');
+          } catch { return; }
+          if (!fmvResult || fmvResult.fmv <= 0) return;
+
+          // Score the deal
+          const scored = dealScorer.score(listing, card, fmvResult);
+          if (scored.signal !== 'strong_buy' && scored.signal !== 'buy' && scored.signal !== 'fair') return;
+
+          deals.push({
+            listing,
+            card,
+            grade,
+            fmv: fmvResult.fmv,
+            score: scored.score,
+            signal: scored.signal,
+            savingsPercent: scored.savingsPercent,
+          });
+        });
+
+        // Sort by score desc, keep top 10
+        deals.sort((a, b) => b.score - a.score);
+        const top = deals.slice(0, 10);
+        const now = new Date().toISOString();
+        featuredDealsCache = { deals: top, generatedAt: now, expiresAt: Date.now() + FEATURED_DEALS_TTL_MS };
+        return json(res, 200, { deals: top, generatedAt: now, cached: false });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[API /api/featured-deals] Error: ${message}`);
         return json(res, 500, { error: message });
       }
     }
@@ -732,6 +823,56 @@ async function main() {
       }
     }
 
+    // POST /api/pricing-reports — Report wrong pricing data
+    if (method === 'POST' && path === '/api/pricing-reports') {
+      try {
+        const body = JSON.parse(await readBody(req)) as {
+          cardId?: string;
+          cardName?: string;
+          setName?: string;
+          grade?: number;
+          message?: string;
+          email?: string;
+        };
+        if (!body.cardId || !body.cardName || body.grade == null || !body.message?.trim()) {
+          return json(res, 400, { error: 'Missing required fields: cardId, cardName, grade, message' });
+        }
+        const id = 'prpt_' + randomUUID().replace(/-/g, '').slice(0, 12);
+        const report: PricingReport = {
+          id,
+          cardId: body.cardId,
+          cardName: body.cardName,
+          setName: body.setName,
+          grade: body.grade,
+          message: body.message.trim(),
+          email: body.email?.trim() || undefined,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Append to markdown file
+        const pricingReportsPath = join(config.storage.jsonPath ?? './data', 'pricing-reports.md');
+        await mkdir(dirname(pricingReportsPath), { recursive: true });
+        try { await access(pricingReportsPath); } catch { await writeFile(pricingReportsPath, '# Pricing Reports\n\n', 'utf-8'); }
+        const md = [
+          `## ${report.id}`,
+          '',
+          `- timestamp: ${report.timestamp}`,
+          `- card: ${report.cardName} (PSA ${report.grade})`,
+          `- cardId: ${report.cardId}`,
+          `- set: ${report.setName || 'n/a'}`,
+          `- email: ${report.email || 'n/a'}`,
+          `- message: ${report.message}`,
+          '',
+        ].join('\n');
+        await appendFile(pricingReportsPath, md, 'utf-8');
+
+        return json(res, 201, { id });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(res, 500, { error: message });
+      }
+    }
+
     // ─── Static File Serving ───
 
     if (method === 'GET') {
@@ -761,6 +902,7 @@ async function main() {
     console.log(`  Search:    GET /api/search?q=...`);
     console.log(`  Pricing:   GET /api/cards/:id/pricing?grade=10`);
     console.log(`  Deals:     GET /api/cards/:id/deals?grade=10 ${scanner ? '(ready)' : '(disabled — no eBay creds)'}`);
+    console.log(`  Featured:  GET /api/featured-deals ${config.ebay?.whitelistSellers?.length ? `(${config.ebay.whitelistSellers.length} sellers)` : '(no sellers configured)'}`);
     console.log(`  Register:  POST /api/cards/register`);
     console.log(`  Watchlist: GET/POST /api/watchlist`);
     console.log(`  Reports:   POST /api/reports`);

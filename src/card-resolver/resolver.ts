@@ -7,6 +7,7 @@ import type {
   GachaAgentConfig,
   Grader,
 } from '../types/index.js';
+import { computeSKU } from '../search/sku.js';
 
 const AUTO_PROCEED_THRESHOLD = 0.85;
 const DISAMBIGUATE_THRESHOLD = 0.70;
@@ -74,6 +75,10 @@ interface SearchCardsResponse {
     imageUrl?: string;
   }>;
   error?: string;
+}
+
+interface CardLookupResponse {
+  data?: { imageUrl?: string } | Array<{ imageUrl?: string }>;
 }
 
 type ParseTitleApiResponse = ParseTitleResponse | ParseTitleV2Response;
@@ -385,6 +390,9 @@ export class CardResolver {
         match.tcgPlayerId != null
           ? String(match.tcgPlayerId)
           : `${setCode}:${number}:${match.name}`;
+      const sku = (setCode !== 'unknown' && number !== 'unknown')
+        ? computeSKU(setCode, number) || undefined
+        : undefined;
 
       candidates.push({
         card: {
@@ -397,6 +405,7 @@ export class CardResolver {
           rarity: match.rarity,
           variant: candidateVariant,
           confidence,
+          sku,
         },
         confidence,
         matchReason:
@@ -573,7 +582,7 @@ export class CardResolver {
     const enriched = await Promise.all(
       top.map(async (candidate) => {
         if (candidate.card.imageUrl) return candidate;
-        const imageUrl = await this.fetchImageUrl(candidate.card.id);
+        const imageUrl = await this.fetchImageUrl(candidate.card);
         if (!imageUrl) return candidate;
         return {
           ...candidate,
@@ -584,27 +593,63 @@ export class CardResolver {
     return [...enriched, ...candidates.slice(5)];
   }
 
-  async fetchImageUrl(tcgPlayerId: string): Promise<string | null> {
-    // Only fetch for numeric IDs (tcgPlayerId)
-    if (!/^\d+$/.test(tcgPlayerId)) return null;
-
+  async fetchImageUrl(card: Pick<ResolvedCard, 'id' | 'name' | 'setName' | 'number'>): Promise<string | null> {
     try {
-      const url = `${this.baseUrl}/api/v2/cards?tcgPlayerId=${tcgPlayerId}`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-      });
-      if (!res.ok) return null;
-
-      const body = (await res.json()) as {
-        data?: { imageUrl?: string } | Array<{ imageUrl?: string }>;
-      };
-      if (Array.isArray(body.data)) {
-        return body.data[0]?.imageUrl ?? null;
+      // Fast path: exact lookup by numeric tcgPlayerId when available.
+      if (/^\d+$/.test(card.id)) {
+        const idData = await this.fetchCardLookupData(`tcgPlayerId=${encodeURIComponent(card.id)}`);
+        const idImage = this.extractImageUrl(idData);
+        if (idImage) return idImage;
       }
-      return body.data?.imageUrl ?? null;
+
+      // Fallback: search by identity terms when parse-title ids are not resolvable.
+      const query = this.buildImageSearchQuery(card);
+      if (!query) return null;
+      const searchData = await this.fetchCardLookupData(
+        `search=${encodeURIComponent(query)}`,
+      );
+      const searchImage = this.extractImageUrl(searchData);
+      if (searchImage) return searchImage;
+
+      // Final fallback: tcgplayer CDN image pattern for numeric product ids.
+      if (/^\d+$/.test(card.id)) {
+        return `https://tcgplayer-cdn.tcgplayer.com/product/${card.id}_in_200x200.jpg`;
+      }
+      return null;
     } catch {
       return null;
     }
+  }
+
+  private buildImageSearchQuery(
+    card: Pick<ResolvedCard, 'name' | 'setName' | 'number'>,
+  ): string {
+    const parts = [card.name];
+    if (card.setName && card.setName !== 'Unknown Set') {
+      parts.push(card.setName);
+    }
+    if (card.number && card.number !== 'unknown') {
+      parts.push(card.number);
+    }
+    return parts.join(' ').trim();
+  }
+
+  private async fetchCardLookupData(query: string): Promise<CardLookupResponse['data']> {
+    const url = `${this.baseUrl}/api/v2/cards?${query}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    });
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as CardLookupResponse;
+    return body.data;
+  }
+
+  private extractImageUrl(data: CardLookupResponse['data']): string | null {
+    if (!data) return null;
+    if (Array.isArray(data)) {
+      return data[0]?.imageUrl ?? null;
+    }
+    return data.imageUrl ?? null;
   }
 
   private buildSearchQuery(
@@ -673,6 +718,10 @@ export class CardResolver {
         baseConfidence + relevanceAdjustment,
       );
 
+      const searchSku = (setCode !== 'unknown' && number !== 'unknown')
+        ? computeSKU(setCode, number) || undefined
+        : undefined;
+
       candidates.push({
         card: {
           id,
@@ -684,6 +733,7 @@ export class CardResolver {
           rarity: item.rarity,
           imageUrl: item.imageUrl,
           confidence,
+          sku: searchSku,
         },
         confidence,
         matchReason: 'Match from search fallback',

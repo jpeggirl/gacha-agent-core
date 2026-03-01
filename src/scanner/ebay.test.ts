@@ -1338,6 +1338,101 @@ describe('EbayScanner', () => {
     });
   });
 
+  describe('scanSellerAuctions()', () => {
+    it('constructs correct seller filter in API request', async () => {
+      let capturedUrl = '';
+      server.use(
+        makeTokenHandler(),
+        http.get(EBAY_BROWSE_URL, ({ request }) => {
+          capturedUrl = request.url;
+          return HttpResponse.json({ total: 0 });
+        }),
+      );
+
+      const scanner = new EbayScanner(TEST_CONFIG);
+      await scanner.scanSellerAuctions(['seller_a', 'seller_b']);
+
+      const url = new URL(capturedUrl);
+      const filter = url.searchParams.get('filter') ?? '';
+      expect(filter).toContain('buyingOptions:{AUCTION}');
+      expect(filter).toContain('sellers:{seller_a|seller_b}');
+      expect(url.searchParams.get('sort')).toBe('endingSoonest');
+      expect(url.searchParams.get('limit')).toBe('200');
+      expect(url.searchParams.get('category_ids')).toBe('183454');
+    });
+
+    it('filters to auctions within time window only', async () => {
+      const now = Date.now();
+      const withinWindow = new Date(now + 3 * 3600000).toISOString(); // 3h from now
+      const outsideWindow = new Date(now + 12 * 3600000).toISOString(); // 12h from now
+
+      server.use(
+        makeTokenHandler(),
+        http.get(EBAY_BROWSE_URL, () =>
+          HttpResponse.json({
+            total: 3,
+            itemSummaries: [
+              {
+                itemId: 'v1|soon|0',
+                title: 'Charizard PSA 10 Base Set',
+                currentBidPrice: { value: '500.00', currency: 'USD' },
+                shippingOptions: [],
+                buyingOptions: ['AUCTION'],
+                seller: { username: 'trusted_seller', feedbackScore: 5000, feedbackPercentage: '99.9' },
+                itemWebUrl: 'https://www.ebay.com/itm/soon',
+                itemEndDate: withinWindow,
+                bidCount: 5,
+              },
+              {
+                itemId: 'v1|later|0',
+                title: 'Pikachu PSA 9 Vivid Voltage',
+                currentBidPrice: { value: '50.00', currency: 'USD' },
+                shippingOptions: [],
+                buyingOptions: ['AUCTION'],
+                seller: { username: 'trusted_seller', feedbackScore: 5000, feedbackPercentage: '99.9' },
+                itemWebUrl: 'https://www.ebay.com/itm/later',
+                itemEndDate: outsideWindow,
+                bidCount: 2,
+              },
+              {
+                itemId: 'v1|noend|0',
+                title: 'Mew PSA 8',
+                currentBidPrice: { value: '20.00', currency: 'USD' },
+                shippingOptions: [],
+                buyingOptions: ['AUCTION'],
+                seller: { username: 'trusted_seller', feedbackScore: 5000, feedbackPercentage: '99.9' },
+                itemWebUrl: 'https://www.ebay.com/itm/noend',
+                bidCount: 1,
+              },
+            ],
+          }),
+        ),
+      );
+
+      const scanner = new EbayScanner(TEST_CONFIG);
+      const listings = await scanner.scanSellerAuctions(['trusted_seller'], 6);
+
+      expect(listings).toHaveLength(1);
+      expect(listings[0]!.itemId).toBe('v1|soon|0');
+    });
+
+    it('returns [] for empty sellers array', async () => {
+      const scanner = new EbayScanner(TEST_CONFIG);
+      const listings = await scanner.scanSellerAuctions([]);
+
+      expect(listings).toHaveLength(0);
+    });
+
+    it('returns [] on API error', async () => {
+      server.use(makeTokenHandler(401));
+
+      const scanner = new EbayScanner(TEST_CONFIG);
+      const listings = await scanner.scanSellerAuctions(['some_seller']);
+
+      expect(listings).toHaveLength(0);
+    });
+  });
+
   describe('shortenRawTitle()', () => {
     it('returns short names (≤5 words) unchanged', () => {
       expect(shortenRawTitle('Shining Mew')).toBe('Shining Mew');

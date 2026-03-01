@@ -349,7 +349,7 @@ describe('CardResolver — enrichCandidatesWithImages', () => {
     expect(enriched[0].card.imageUrl).toBe('https://img.example.com/existing.jpg');
   });
 
-  it('handles API failure gracefully (returns candidate without image)', async () => {
+  it('falls back to tcgplayer CDN pattern when API lookups fail', async () => {
     server.use(
       http.get(`${BASE_URL}/api/v2/cards`, () => {
         return new HttpResponse(null, { status: 500 });
@@ -373,15 +373,26 @@ describe('CardResolver — enrichCandidatesWithImages', () => {
     ];
 
     const enriched = await resolver.enrichCandidatesWithImages(candidates);
-    expect(enriched[0].card.imageUrl).toBeUndefined();
+    expect(enriched[0].card.imageUrl).toBe('https://tcgplayer-cdn.tcgplayer.com/product/12345_in_200x200.jpg');
   });
 
-  it('skips non-numeric IDs', async () => {
-    let apiCalled = false;
+  it('falls back to search lookup for non-numeric IDs', async () => {
+    let usedSearch = false;
+    let usedIdLookup = false;
     server.use(
-      http.get(`${BASE_URL}/api/v2/cards`, () => {
-        apiCalled = true;
-        return HttpResponse.json({ data: { imageUrl: 'https://img.example.com/x.jpg' } });
+      http.get(`${BASE_URL}/api/v2/cards`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('tcgPlayerId')) {
+          usedIdLookup = true;
+          return HttpResponse.json({ data: [] });
+        }
+        if (url.searchParams.get('search')) {
+          usedSearch = true;
+          return HttpResponse.json({
+            data: [{ imageUrl: 'https://img.example.com/from-search.jpg' }],
+          });
+        }
+        return HttpResponse.json({ data: [] });
       }),
     );
 
@@ -402,8 +413,51 @@ describe('CardResolver — enrichCandidatesWithImages', () => {
     ];
 
     const enriched = await resolver.enrichCandidatesWithImages(candidates);
-    expect(enriched[0].card.imageUrl).toBeUndefined();
-    expect(apiCalled).toBe(false);
+    expect(enriched[0].card.imageUrl).toBe('https://img.example.com/from-search.jpg');
+    expect(usedSearch).toBe(true);
+    expect(usedIdLookup).toBe(false);
+  });
+
+  it('falls back to search lookup when numeric ID lookup returns empty', async () => {
+    let usedSearch = false;
+    let usedIdLookup = false;
+    server.use(
+      http.get(`${BASE_URL}/api/v2/cards`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('tcgPlayerId')) {
+          usedIdLookup = true;
+          return HttpResponse.json({ data: [] });
+        }
+        if (url.searchParams.get('search')) {
+          usedSearch = true;
+          return HttpResponse.json({
+            data: [{ imageUrl: 'https://img.example.com/fallback.jpg' }],
+          });
+        }
+        return HttpResponse.json({ data: [] });
+      }),
+    );
+
+    const candidates = [
+      {
+        card: {
+          id: '598364',
+          name: 'EEVEE',
+          setName: 'POKEMON JAPANESE SM PROMO',
+          setCode: '1000',
+          number: '287',
+          year: 2018,
+          confidence: 0.8,
+        },
+        confidence: 0.8,
+        matchReason: 'name match',
+      },
+    ];
+
+    const enriched = await resolver.enrichCandidatesWithImages(candidates);
+    expect(enriched[0].card.imageUrl).toBe('https://img.example.com/fallback.jpg');
+    expect(usedIdLookup).toBe(true);
+    expect(usedSearch).toBe(true);
   });
 });
 

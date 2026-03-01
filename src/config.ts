@@ -23,6 +23,9 @@ export function loadConfig(): GachaAgentConfig {
           appId: env('EBAY_APP_ID'),
           certId: env('EBAY_CERT_ID'),
           sandbox: process.env.EBAY_SANDBOX === 'true',
+          whitelistSellers: process.env.EBAY_WHITELIST_SELLERS
+            ? process.env.EBAY_WHITELIST_SELLERS.split(',').map(s => s.trim()).filter(Boolean)
+            : undefined,
         }
       : undefined,
     telegram: process.env.TELEGRAM_BOT_TOKEN

@@ -2,20 +2,27 @@ import type { InventoryItem, CardCandidate, ResolveResult } from '../types/index
 import type { InventoryManager } from '../inventory/manager.js';
 import type { CardResolver } from '../card-resolver/resolver.js';
 import type { CardRegistry } from './card-registry.js';
+import type { SetAliasRegistry } from './set-aliases.js';
+import { parseQuery } from './query-normalizer.js';
 
 const INVENTORY_CONFIDENCE = 0.90;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 export class CascadingSearch {
   private cache = new Map<string, { result: ResolveResult; expiresAt: number }>();
+  private setAliasRegistry?: SetAliasRegistry;
 
   constructor(
     private inventoryManager: InventoryManager,
     private resolver: CardResolver,
     private cardRegistry?: CardRegistry,
-  ) {}
+    setAliasRegistry?: SetAliasRegistry,
+  ) {
+    this.setAliasRegistry = setAliasRegistry;
+  }
 
   async search(query: string): Promise<ResolveResult> {
+    const parsed = parseQuery(query, this.setAliasRegistry);
     const cleaned = this.preprocessQuery(query);
     const key = this.normalizeKey(cleaned);
 
@@ -36,7 +43,7 @@ export class CascadingSearch {
 
     let result: ResolveResult;
 
-    const inventoryHits = await this.inventoryManager.search(cleaned);
+    const inventoryHits = await this.inventoryManager.search(cleaned, parsed);
 
     if (inventoryHits.length > 0) {
       const candidates = this.dedup(inventoryHits.map((item) => this.toCandidate(item)));
@@ -119,6 +126,7 @@ export class CascadingSearch {
         variant: item.variant,
         imageUrl: item.imageUrl,
         confidence: INVENTORY_CONFIDENCE,
+        sku: item.sku,
       },
       confidence: INVENTORY_CONFIDENCE,
       matchReason: 'Matched from Gacha inventory',

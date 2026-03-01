@@ -1,5 +1,8 @@
 import type { StorageAdapter, InventoryItem, ResolvedCard, Grader } from '../types/index.js';
 import { parseInventoryCSV, parseGachaExportCSV } from './csv-parser.js';
+import type { SetAliasRegistry } from '../search/set-aliases.js';
+import type { ParsedQuery } from '../search/query-normalizer.js';
+import { computeSKU } from '../search/sku.js';
 
 const INVENTORY_PREFIX = 'inventory:';
 const STOPWORDS = new Set([
@@ -13,13 +16,17 @@ export interface ImportResult {
 }
 
 export class InventoryManager {
-  constructor(private storage: StorageAdapter) {}
+  private registry?: SetAliasRegistry;
+
+  constructor(private storage: StorageAdapter, registry?: SetAliasRegistry) {
+    this.registry = registry;
+  }
 
   async importFromCSV(csvContent: string): Promise<ImportResult> {
     const isGachaExport = this.detectGachaExportFormat(csvContent);
     const { items, errors } = isGachaExport
-      ? parseGachaExportCSV(csvContent)
-      : parseInventoryCSV(csvContent);
+      ? parseGachaExportCSV(csvContent, this.registry)
+      : parseInventoryCSV(csvContent, this.registry);
 
     for (const item of items) {
       await this.storage.set(`${INVENTORY_PREFIX}${item.id}`, item);
@@ -55,12 +62,50 @@ export class InventoryManager {
     });
   }
 
-  async search(query: string): Promise<InventoryItem[]> {
+  /**
+   * Three-tier inventory search:
+   * Tier 1 — SKU match (exact, fast)
+   * Tier 2 — Name + number match (fuzzy)
+   * Tier 3 — All-terms fallback (backward compatible)
+   */
+  async search(query: string, parsed?: ParsedQuery): Promise<InventoryItem[]> {
     const all = await this.getAll();
+    const available = all.filter((item) => item.status === 'available');
+
+    // ─── Tier 1: SKU Match ───
+    if (parsed && parsed.cardNumber && parsed.setHints.length > 0 && this.registry) {
+      const setMatch = this.registry.lookup(parsed.setHints[0]!);
+      if (setMatch) {
+        const targetSku = computeSKU(setMatch.setCode, parsed.cardNumber);
+        if (targetSku) {
+          const skuMatches = available.filter((item) => item.sku === targetSku);
+          if (skuMatches.length > 0) return skuMatches;
+        }
+      }
+    }
+
+    // ─── Tier 2: Name + Number Match ───
+    if (parsed && parsed.cardName && parsed.cardNumber) {
+      const nameLower = parsed.cardName.toLowerCase();
+      const nameTokens = nameLower.split(/\s+/).filter(Boolean);
+      const numberNormalized = parsed.cardNumber.replace(/^0+/, '') || '0';
+
+      const nameNumberMatches = available.filter((item) => {
+        const itemNameLower = item.name.toLowerCase();
+        const itemNumber = item.number.split('/')[0]?.replace(/^0+/, '') || '';
+        // All name tokens must appear in item name
+        const nameMatch = nameTokens.every((t) => itemNameLower.includes(t));
+        // Number must match (numerator comparison)
+        const numberMatch = itemNumber === numberNormalized || item.number.includes(parsed.cardNumber!);
+        return nameMatch && numberMatch;
+      });
+      if (nameNumberMatches.length > 0) return nameNumberMatches;
+    }
+
+    // ─── Tier 3: Term Fallback (original logic) ───
     const terms = query.toLowerCase().split(/[\s/]+/).map((t) => t.replace(/^#/, '')).filter((t) => t && !STOPWORDS.has(t));
 
-    return all.filter((item) => {
-      if (item.status !== 'available') return false;
+    return available.filter((item) => {
       const searchable = `${item.name} ${item.setName} ${item.number} ${item.variant ?? ''} ${item.grader} ${item.grade}`.toLowerCase();
       return terms.every((term) => searchable.includes(term));
     });

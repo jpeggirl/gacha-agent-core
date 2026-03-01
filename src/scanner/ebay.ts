@@ -341,6 +341,82 @@ export class EbayScanner {
     }
   }
 
+  /**
+   * Scan auctions from specific whitelisted sellers, filtered to those ending soon.
+   * Used for the Featured Deals feature on the home page.
+   */
+  async scanSellerAuctions(sellers: string[], hoursRemaining = 6): Promise<EbayListing[]> {
+    if (sellers.length === 0) return [];
+    try {
+      await this.ensureToken();
+      const baseUrl = this.sandbox ? EBAY_SANDBOX_API : EBAY_BROWSE_API;
+      const sellerFilter = sellers.join('|');
+      const params = new URLSearchParams({
+        q: 'PSA Pokemon card',
+        category_ids: GRADED_CARDS_CATEGORY,
+        limit: '200',
+        filter: `buyingOptions:{AUCTION},sellers:{${sellerFilter}}`,
+        sort: 'endingSoonest',
+        aspect_filter: `categoryId:${GRADED_CARDS_CATEGORY},Professional Grader:{PSA}`,
+      });
+
+      const res = await fetch(`${baseUrl}/item_summary/search?${params}`, {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`eBay Browse API error: ${res.status} ${res.statusText}`);
+      }
+
+      const data = (await res.json()) as EbaySearchResponse;
+      if (!data.itemSummaries) return [];
+
+      const cutoff = Date.now() + hoursRemaining * 3600000;
+
+      return data.itemSummaries
+        .filter((item) => {
+          if (!item.itemEndDate) return false;
+          if (item.price == null && item.currentBidPrice == null) return false;
+          return new Date(item.itemEndDate).getTime() <= cutoff;
+        })
+        .map((item) => {
+          const priceObj = item.currentBidPrice ?? item.price!;
+          const price = parseFloat(priceObj.value);
+          const shippingCost = item.shippingOptions?.[0]?.shippingCost
+            ? parseFloat(item.shippingOptions[0].shippingCost.value)
+            : 0;
+
+          return {
+            itemId: item.itemId,
+            title: item.title,
+            price,
+            currency: priceObj.currency,
+            shippingCost,
+            totalPrice: price + shippingCost,
+            listingType: 'Auction' as ListingType,
+            sellerUsername: item.seller?.username ?? 'unknown',
+            sellerFeedbackScore: item.seller?.feedbackScore ?? 0,
+            sellerFeedbackPercent: item.seller?.feedbackPercentage
+              ? parseFloat(item.seller.feedbackPercentage)
+              : 0,
+            imageUrl: item.image?.imageUrl,
+            itemUrl: item.itemWebUrl,
+            endDate: item.itemEndDate,
+            condition: item.condition,
+            bidCount: item.bidCount,
+          };
+        });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[EbayScanner] scanSellerAuctions failed: ${message}`);
+      return [];
+    }
+  }
+
   /** Build a short query for auction searches — cleaned card name + number only.
    * Long variant phrases and grade labels are omitted to maximize results;
    * the aspect_filter and post-filter handle those concerns. */

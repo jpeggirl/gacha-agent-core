@@ -16,6 +16,7 @@ export interface ResolvedCard {
   variant?: string; // "1st Edition", "Shadowless", "Holo", etc.
   imageUrl?: string;
   confidence: number; // 0-1.0 from parse-title API
+  sku?: string; // deterministic "{setCode}-{number}" e.g. "swsh7-215"
 }
 
 export interface CardCandidate {
@@ -202,6 +203,7 @@ export interface InventoryItem {
   certNumber?: string;
   populationCount?: number; // PSA population at this grade
   year?: number;            // Card year
+  sku?: string;             // deterministic "{setCode}-{number}" e.g. "swsh7-215"
   status: 'available' | 'reserved' | 'sold';
   createdAt: string;
 }
@@ -251,6 +253,17 @@ export interface ListingReport {
   reportedFmv: number | null;
   reportedPrice: number;
   reason?: string;
+  timestamp: string;
+}
+
+export interface PricingReport {
+  id: string;
+  cardId: string;
+  cardName: string;
+  setName?: string;
+  grade: number;
+  message: string;
+  email?: string;
   timestamp: string;
 }
 
@@ -324,6 +337,7 @@ export interface GachaAgentConfig {
     certId: string;
     devId?: string;
     sandbox?: boolean;
+    whitelistSellers?: string[];
   };
   telegram?: {
     botToken: string;
