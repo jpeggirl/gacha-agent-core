@@ -1039,7 +1039,7 @@
                         : '';
 
                     ahtml += `
-                        <div class="px-4 py-3 border-b border-[#1a1a1a] table-row-hover${a.itemUrl ? ' cursor-pointer' : ''}" ${a.itemUrl ? `onclick="window.open('${esc(a.itemUrl)}', '_blank')"` : ''}>
+                        <div class="px-4 py-3 border-b border-[#1a1a1a] table-row-hover${a.itemUrl ? ' cursor-pointer' : ''}" ${a.itemUrl ? `onclick="if (event.target.closest('.tip-trigger, a, button, input, textarea, select')) return; window.open('${esc(a.itemUrl)}', '_blank')"` : ''}>
                             <div class="sm:grid sm:grid-cols-[1fr_100px_60px_130px_90px] sm:gap-2 sm:items-start">
                                 <h4 class="text-sm font-medium truncate">${esc(a.title)}${viewLink}</h4>
                                 <div class="text-right">
